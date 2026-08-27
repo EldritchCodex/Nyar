@@ -1,0 +1,55 @@
+---
+Language: Cpp
+Standard: Latest
+BasedOnStyle: LLVM
+
+# Comments
+ReflowComments: true
+AlignTrailingComments:
+  Kind: Always # Always | Never | Leave
+  # OverEmptyLines: 1 # align across this many empty lines
+
+# Indentation and Tabs
+UseTab: Never
+TabWidth: 4
+IndentWidth: 4
+ContinuationIndentWidth: 4
+IndentCaseLabels: true
+
+# Brace Style
+BreakBeforeBraces: Allman
+AllowShortBlocksOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Line Length
+ColumnLimit: 100
+
+# Pointer and Reference Alignment
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+
+# Spacing
+SpaceBeforeParens: ControlStatements
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpacesInAngles: Never
+
+# Alignment
+AlignAfterOpenBracket: Align
+AlignOperands: Align
+
+# Classes, Namespaces, and Templates
+NamespaceIndentation: None
+AlwaysBreakTemplateDeclarations: Yes
+AccessModifierOffset: -4
+
+# Others
+BreakBinaryOperations: RespectPrecedence
+AllowShortCompoundRequirementOnASingleLine: true
+BinPackArguments: false
+BinPackParameters: false
+...
