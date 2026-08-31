@@ -10,6 +10,7 @@ This project is designed as a separate module for the [Nodens](https://github.co
 
 ## References
 - Akenine-Möller, T., Haines, E., Hoffman, N., Pesce, A., Iwanicki, M., & Hillaire, S. (2019). **Real-time rendering** (Fourth edition). CRC Press.
+- Eisemann, E. (Ed.). (2012). **Real-time shadows**. CRC Press.
 - Gregory, J. (2019). **Game engine architecture** (Third edition). CRC Press, Taylor & Francis Group.
 - Lengyel, E. (2019). **Foundations of game engine development. Volume 2: Rendering**. Terathon Software LLC.
 - Pharr, M., Jakob, W., & Humphreys, G. (2017). **Physically based rendering: From theory to implementation** (Third edition). Morgan Kaufmann Publishers/Elsevier. https://www.pbr-book.org/
