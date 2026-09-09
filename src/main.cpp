@@ -22,15 +22,15 @@
 import vulkan;
 import std;
 
-constexpr uint32_t WINDOW_WIDTH = 800;
-constexpr uint32_t WINDOW_HEIGHT = 600;
+constexpr uint32_t WINDOW_WIDTH{800};
+constexpr uint32_t WINDOW_HEIGHT{600};
 
 const std::vector<char const*> validationLayers{"VK_LAYER_KHRONOS_validation"};
 
 #ifdef NDEBUG
-constexpr bool enableValidationLayers = false;
+constexpr bool enableValidationLayers{false};
 #else
-constexpr bool enableValidationLayers = true;
+constexpr bool enableValidationLayers{true};
 #endif
 
 class HelloTriangleApplication
@@ -63,7 +63,7 @@ private:
         // with the window system. GLFW has a handy built-in function that returns the extension(s)
         // it needs to do that which we can pass to the struct”
         // - (“Khronos Vulkan Tutorial / Drawing a Triangle / Setup - Instance”)
-        uint32_t glfwExtensionCount = 0;
+        uint32_t glfwExtensionCount{0};
         auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
         std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
@@ -104,8 +104,8 @@ private:
             { return !std::ranges::contains(availableExtensionsNames, requiredName); });
         if (unsupportedExtensionIt != requiredExtensionsNames.end())
         {
-            throw std::runtime_error("Required GLFW extension not supported: " +
-                                     std::string(*unsupportedExtensionIt));
+            throw std::runtime_error{"Required GLFW extension not supported: " +
+                                     std::string{*unsupportedExtensionIt}};
         }
 
         // LAYERS //////////////////////////////////////////////////////////////////////////////////
@@ -121,7 +121,7 @@ private:
         }
 
         // Check for required layers
-        std::vector<char const*> requiredLayers;
+        std::vector<char const*> requiredLayers{};
         if (enableValidationLayers)
         {
             requiredLayers.assign(validationLayers.begin(), validationLayers.end());
@@ -132,8 +132,8 @@ private:
 
         if (unsupportedLayerIt != requiredLayers.end())
         {
-            throw std::runtime_error("Required layer not supported {}" +
-                                     std::string{*unsupportedLayerIt});
+            throw std::runtime_error{"Required layer not supported {}" +
+                                     std::string{*unsupportedLayerIt}};
         }
 
         // CREATE INSTANCE /////////////////////////////////////////////////////////////////////////
@@ -144,7 +144,7 @@ private:
             .enabledExtensionCount = static_cast<uint32_t>(requiredExtensionsNames.size()),
             .ppEnabledExtensionNames = requiredExtensionsNames.data()};
 
-        instance = vk::raii::Instance(context, createInfo);
+        instance = vk::raii::Instance{context, createInfo};
     }
 
     void setupDebugMessenger()
@@ -171,7 +171,7 @@ private:
 
         if (!glfwInit())
         {
-            throw std::runtime_error("GLFW Initialization failed.");
+            throw std::runtime_error{"GLFW Initialization failed."};
         }
 
         // GLFW was originally designed to work with OpenGL contexts,
@@ -200,17 +200,17 @@ private:
     }
 
 private:
-    GLFWwindow* window = nullptr;
-    vk::raii::Context context;
-    vk::raii::Instance instance = nullptr;
-    vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
+    GLFWwindow* window{nullptr};
+    vk::raii::Context context{};
+    vk::raii::Instance instance{nullptr};
+    vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr};
 };
 
 int main()
 {
     try
     {
-        HelloTriangleApplication app;
+        HelloTriangleApplication app{};
         app.run();
     }
     catch (const vk::SystemError& err)
