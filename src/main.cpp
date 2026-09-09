@@ -3,23 +3,11 @@
 // Baseline implementation following the Khronos Vulkan "Drawing a Triangle" tutorial.
 // Serves as the working foundation before being iteratively refactored into a custom
 // renderer API for the Nodens framework.
-#include <algorithm>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
-#include <exception>
-#include <print>
-#include <ranges>
-#include <stdexcept>
-#include <string>
-#include <vector>
-#include <vk_video/vulkan_video_codec_av1std.h>
-#include <vulkan/vk_platform.h>
-#include <vulkan/vulkan_core.h>
-#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <ranges>
 #include <vulkan/vk_platform.h>
 
 import vulkan;
@@ -43,6 +31,7 @@ public:
     {
         initVulkan();
         setupDebugMessenger();
+        pickPhysicalDevice();
         mainLoop();
         cleanup();
     }
@@ -168,6 +157,59 @@ private:
         debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
     }
 
+    bool isDeviceSuitable(const vk::raii::PhysicalDevice& physicalDevice)
+    {
+        bool supportsVulkan1_3 = physicalDevice.getProperties().apiVersion >= vk::ApiVersion13;
+
+        auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+        bool supportsGraphics = std::ranges::any_of(
+            queueFamilies,
+            [](const auto& qfp)
+            { return static_cast<bool>(qfp.queueFlags & vk::QueueFlagBits::eGraphics); });
+
+        std::vector<const char*> requiredDeviceExtension{vk::KHRDisplaySwapchainExtensionName};
+        auto availableDeviceExtensionsNames =
+            physicalDevice.enumerateDeviceExtensionProperties() |
+            std::views::transform([](const auto& prop)
+                                  { return std::string_view(prop.extensionName); });
+        bool supportsAllRequiredExtensions = std::ranges::all_of(
+            requiredDeviceExtension,
+            [&availableDeviceExtensionsNames](std::string_view requiredDeviceExtension)
+            {
+                return std::ranges::contains(availableDeviceExtensionsNames,
+                                             requiredDeviceExtension);
+            });
+
+        auto features =
+            physicalDevice
+                .template getFeatures2<vk::PhysicalDeviceFeatures2,
+                                       vk::PhysicalDeviceVulkan11Features,
+                                       vk::PhysicalDeviceVulkan13Features,
+                                       vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+        bool supportsRequiredFeatures =
+            features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
+            features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+            features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()
+                .extendedDynamicState;
+
+        return supportsVulkan1_3 &&
+               supportsGraphics &&
+               supportsAllRequiredExtensions &&
+               supportsRequiredFeatures;
+    }
+
+    void pickPhysicalDevice()
+    {
+        auto availablePhysicalDevices = instance.enumeratePhysicalDevices();
+        auto deviceIterator = std::ranges::find_if(
+            availablePhysicalDevices, [&](const auto& dev) { return isDeviceSuitable(dev); });
+        if (deviceIterator == availablePhysicalDevices.end())
+        {
+            throw std::runtime_error{"failed to find suitable GPU!"};
+        }
+        physicalDevice = *deviceIterator;
+    }
+
     void initVulkan()
     {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
@@ -207,6 +249,7 @@ private:
     vk::raii::Context context{};
     vk::raii::Instance instance{nullptr};
     vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr};
+    vk::raii::PhysicalDevice physicalDevice{nullptr};
 };
 
 int main()
