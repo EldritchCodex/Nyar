@@ -11,8 +11,10 @@
 #include <print>
 #include <ranges>
 #include <stdexcept>
+#include <string>
 #include <vector>
 #include <vk_video/vulkan_video_codec_av1std.h>
+#include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -37,11 +39,24 @@ public:
     void run()
     {
         initVulkan();
+        setupDebugMessenger();
         mainLoop();
         cleanup();
     }
 
 private:
+    static VKAPI_ATTR vk::Bool32 VKAPI_CALL
+    debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+                  vk::DebugUtilsMessageTypeFlagsEXT type,
+                  const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                  void* pUserData)
+    {
+        std::println(
+            stderr, "[validation layer][{}]: {}", to_string(type), pCallbackData->pMessage);
+
+        return vk::False;
+    }
+
     std::vector<const char*> getRequiredInstanceExtensionsNames()
     {
         // “Vulkan is a platform-agnostic API, which means that you need an extension to interface
@@ -51,6 +66,12 @@ private:
         uint32_t glfwExtensionCount = 0;
         auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
         std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+        if (enableValidationLayers)
+        {
+            extensions.push_back(vk::EXTDebugUtilsExtensionName);
+        }
+
         return extensions;
     }
 
@@ -126,6 +147,24 @@ private:
         instance = vk::raii::Instance(context, createInfo);
     }
 
+    void setupDebugMessenger()
+    {
+        if (!enableValidationLayers)
+            return;
+
+        vk::DebugUtilsMessageSeverityFlagsEXT severityFlags{
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError};
+        vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags{
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral};
+        vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT{
+            .messageSeverity = severityFlags,
+            .messageType = messageTypeFlags,
+            .pfnUserCallback = &debugCallback};
+        debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
+    }
+
     void initVulkan()
     {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
@@ -164,6 +203,7 @@ private:
     GLFWwindow* window = nullptr;
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
+    vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
 };
 
 int main()
