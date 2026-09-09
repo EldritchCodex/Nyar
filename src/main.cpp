@@ -18,6 +18,9 @@
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <cstdio>
+#include <cstdlib>
+#include <vulkan/vk_platform.h>
 
 import vulkan;
 import std;
@@ -79,9 +82,9 @@ private:
     {
         // DEFINE APPLICATION INFO /////////////////////////////////////////////////////////////////
         constexpr vk::ApplicationInfo appInfo{.pApplicationName = "Hello Triangle",
-                                              .applicationVersion = VK_MAKE_VERSION(0, 0, 0),
+                                              .applicationVersion = vk::makeApiVersion(0, 0, 0, 0),
                                               .pEngineName = "Nyar",
-                                              .engineVersion = VK_MAKE_VERSION(0, 0, 0),
+                                              .engineVersion = vk::makeApiVersion(0, 0, 0, 0),
                                               .apiVersion = vk::ApiVersion14};
 
         // EXTENSIONS //////////////////////////////////////////////////////////////////////////////
@@ -132,7 +135,7 @@ private:
 
         if (unsupportedLayerIt != requiredLayers.end())
         {
-            throw std::runtime_error{"Required layer not supported {}" +
+            throw std::runtime_error{"Required layer not supported " +
                                      std::string{*unsupportedLayerIt}};
         }
 
