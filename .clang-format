@@ -24,7 +24,7 @@ AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 
 # Line Length
-ColumnLimit: 100
+ColumnLimit: 120
 
 # Pointer and Reference Alignment
 PointerAlignment: Left
@@ -39,7 +39,7 @@ SpaceBeforeAssignmentOperators: true
 SpacesInAngles: Never
 
 # Alignment
-AlignAfterOpenBracket: Align
+AlignAfterOpenBracket: BlockIndent   # Prevents lo/hi from aligning to the '(' column
 AlignOperands: Align
 
 # Classes, Namespaces, and Templates
@@ -50,6 +50,7 @@ AccessModifierOffset: -4
 # Others
 BreakBinaryOperations: RespectPrecedence
 AllowShortCompoundRequirementOnASingleLine: true
+Cpp11BracedListStyle: true          # Formats braced initializers like blocks (newline after '{')
 BinPackArguments: false
 BinPackParameters: false
 ...
