@@ -5,7 +5,6 @@
 // renderer API for the Nodens framework.
 #include <GLFW/glfw3.h>
 #include <algorithm>
-#include <cstdio>
 #include <cstdlib>
 #include <ranges>
 #include <vulkan/vk_platform.h>
@@ -167,7 +166,7 @@ private:
             [](const auto& qfp)
             { return static_cast<bool>(qfp.queueFlags & vk::QueueFlagBits::eGraphics); });
 
-        std::vector<const char*> requiredDeviceExtension{vk::KHRDisplaySwapchainExtensionName};
+        std::vector<const char*> requiredDeviceExtension{vk::KHRSwapchainExtensionName};
         auto availableDeviceExtensionsNames =
             physicalDevice.enumerateDeviceExtensionProperties() |
             std::views::transform([](const auto& prop)
