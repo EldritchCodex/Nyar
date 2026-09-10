@@ -4,9 +4,8 @@
 // Serves as the working foundation before being iteratively refactored into a custom
 // renderer API for the Nodens framework.
 #include <GLFW/glfw3.h>
-#include <algorithm>
+#include <cstdio>
 #include <cstdlib>
-#include <ranges>
 #include <vulkan/vk_platform.h>
 
 import vulkan;
@@ -31,6 +30,7 @@ public:
         initVulkan();
         setupDebugMessenger();
         pickPhysicalDevice();
+        createLogicalDevice();
         mainLoop();
         cleanup();
     }
@@ -209,6 +209,55 @@ private:
         physicalDevice = *deviceIterator;
     }
 
+    void createLogicalDevice()
+    {
+        // Queue Family Selection //////////////////////////////////////////////////////////////////
+        std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
+            physicalDevice.getQueueFamilyProperties();
+        auto graphicsQueueFamilyProperty =
+            std::ranges::find_if(queueFamilyProperties,
+                                 [](const vk::QueueFamilyProperties& qfp)
+                                 {
+                                     return (qfp.queueFlags & vk::QueueFlagBits::eGraphics) !=
+                                            static_cast<vk::QueueFlags>(0);
+                                 });
+        auto graphicsIndex = static_cast<uint32_t>(
+            std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
+
+        // Queue Creation Info /////////////////////////////////////////////////////////////////////
+        float queuePriority{0.5f};
+
+        vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
+            .queueFamilyIndex = graphicsIndex, .queueCount = 1, .pQueuePriorities = &queuePriority};
+
+        // Device Extensions ///////////////////////////////////////////////////////////////////////
+        std::vector<const char*> requiredDeviceExtension{vk::KHRSwapchainExtensionName};
+
+        // Device Features /////////////////////////////////////////////////////////////////////////
+        vk::StructureChain<vk::PhysicalDeviceFeatures2,
+                           vk::PhysicalDeviceVulkan11Features,
+                           vk::PhysicalDeviceVulkan13Features,
+                           vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+            featureChain = {{},
+                            {.shaderDrawParameters = true},
+                            {.dynamicRendering = true},
+                            {.extendedDynamicState = true}};
+
+        // Logical Device Creation /////////////////////////////////////////////////////////////////
+        vk::DeviceCreateInfo deviceCreateInfo{
+            .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+            .queueCreateInfoCount = 1,
+            .pQueueCreateInfos = &deviceQueueCreateInfo,
+            .enabledExtensionCount = 1,
+            .ppEnabledExtensionNames = requiredDeviceExtension.data()};
+
+        device = vk::raii::Device(physicalDevice, deviceCreateInfo);
+
+        // Store a handle to the first (0) queue from the queue family `graphicsIndex` on logical
+        // device `device`
+        graphicsQueue = vk::raii::Queue(device, graphicsIndex, 0);
+    }
+
     void initVulkan()
     {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
@@ -249,6 +298,8 @@ private:
     vk::raii::Instance instance{nullptr};
     vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr};
     vk::raii::PhysicalDevice physicalDevice{nullptr};
+    vk::raii::Device device{nullptr};
+    vk::raii::Queue graphicsQueue{nullptr};
 };
 
 int main()
