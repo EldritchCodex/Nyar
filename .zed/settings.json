@@ -1,0 +1,19 @@
+{
+  "languages": {
+    "Slang": {
+      "format_on_save": "on",
+      "formatter": "language_server"
+    }
+  },
+
+  "lsp": {
+    "clangd": {
+      "binary": {
+        "arguments": [
+          "--experimental-modules-support",
+          "--header-insertion=never"
+        ]
+      }
+    },
+  }
+}

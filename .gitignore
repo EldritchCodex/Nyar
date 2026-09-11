@@ -1,45 +1,46 @@
+# Editor and local tooling caches
 .cache/
-.zed/
+.zed/*
+!.zed/settings.json
+!.zed/tasks.json
+
+# Build output
 build/
 
-# Prerequisites
+# C/C++ dependency files
 *.d
 
-# Compiled Object files
-*.slo
-*.lo
+# Object files
 *.o
 *.obj
+*.lo
+*.slo
 
-# Precompiled Headers
+# Precompiled headers
 *.gch
 *.pch
 
-# Linker files
+# Compiler and linker debug files
+*.dwo
 *.ilk
-
-# Debugger Files
 *.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
 
 # Fortran module files
 *.mod
 *.smod
 
-# Compiled Static libraries
-*.lai
-*.la
+# Static libraries
 *.a
+*.la
+*.lai
 *.lib
 
-# Executables
+# Shared libraries
+*.so
+*.dylib
+*.dll
+
+# Executables and application bundles
 *.exe
 *.out
 *.app
-
-# debug information files
-*.dwo
