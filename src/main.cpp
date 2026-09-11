@@ -35,6 +35,8 @@ public:
         pickPhysicalDevice();
         createLogicalDevice();
         createSwapChain();
+        createImageViews();
+
         mainLoop();
         cleanup();
     }
@@ -162,6 +164,16 @@ private:
         debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
     }
 
+    void createSurface()
+    {
+        VkSurfaceKHR rawSurface{VK_NULL_HANDLE};
+        if (glfwCreateWindowSurface(*instance, window, nullptr, &rawSurface) != 0)
+        {
+            throw std::runtime_error("failed to create window surface!");
+        }
+        surface = vk::raii::SurfaceKHR(instance, rawSurface);
+    }
+
     bool isDeviceSuitable(const vk::raii::PhysicalDevice& physicalDevice)
     {
         bool supportsVulkan1_3 = physicalDevice.getProperties().apiVersion >= vk::ApiVersion13;
@@ -193,16 +205,6 @@ private:
             features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
         return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
-    }
-
-    void createSurface()
-    {
-        VkSurfaceKHR rawSurface{VK_NULL_HANDLE};
-        if (glfwCreateWindowSurface(*instance, window, nullptr, &rawSurface) != 0)
-        {
-            throw std::runtime_error("failed to create window surface!");
-        }
-        surface = vk::raii::SurfaceKHR(instance, rawSurface);
     }
 
     void pickPhysicalDevice()
@@ -377,6 +379,29 @@ private:
         swapChainImages = swapChain.getImages();
     }
 
+    void createImageViews()
+    {
+        assert(!swapChainImages.empty());
+
+        vk::ImageViewCreateInfo imageViewCreateInfo{
+            .viewType = vk::ImageViewType::e2D,
+            .format = swapChainSurfaceFormat.format,
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            },
+        };
+
+        for (auto& image : swapChainImages)
+        {
+            imageViewCreateInfo.image = image;
+            swapChainImageViews.emplace_back(device, imageViewCreateInfo);
+        }
+    }
+
     void initVulkan()
     {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
@@ -424,6 +449,7 @@ private:
     vk::Extent2D swapChainExtent{};
     vk::SurfaceFormatKHR swapChainSurfaceFormat{};
     std::vector<vk::Image> swapChainImages{};
+    std::vector<vk::raii::ImageView> swapChainImageViews{};
 };
 
 int main()
