@@ -1,13 +1,5 @@
----
-Language: Cpp
-Standard: Latest
 BasedOnStyle: LLVM
 
-# Comments
-ReflowComments: true
-AlignTrailingComments:
-  Kind: Always # Always | Never | Leave
-  # OverEmptyLines: 1 # align across this many empty lines
 
 # Indentation and Tabs
 UseTab: Never
@@ -23,8 +15,11 @@ AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 
-# Line Length
-ColumnLimit: 120
+# Comments
+ReflowComments: true
+AlignTrailingComments:
+  Kind: Always # Always | Never | Leave
+  # OverEmptyLines: 1 # align across this many empty lines
 
 # Pointer and Reference Alignment
 PointerAlignment: Left
@@ -53,4 +48,16 @@ AllowShortCompoundRequirementOnASingleLine: true
 Cpp11BracedListStyle: true          # Formats braced initializers like blocks (newline after '{')
 BinPackArguments: false
 BinPackParameters: false
-...
+
+---
+# Slang-specific options (slangd invokes clang-format using a .cs filename)
+Language: CSharp
+# Line Length
+ColumnLimit: 80
+
+---
+# Cpp-specific options
+Language: Cpp
+Standard: Latest
+# Line Length
+ColumnLimit: 120
