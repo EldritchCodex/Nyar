@@ -13,8 +13,9 @@
 import vulkan;
 import std;
 
-constexpr uint32_t WINDOW_WIDTH{800};
-constexpr uint32_t WINDOW_HEIGHT{600};
+constexpr uint32_t WINDOW_WIDTH{400};
+constexpr uint32_t WINDOW_HEIGHT{300};
+constexpr int MAX_FRAMES_IN_FLIGHT{2};
 
 const std::vector<char const*> validationLayers{"VK_LAYER_KHRONOS_validation"};
 
@@ -37,6 +38,9 @@ public:
         createSwapChain();
         createImageViews();
         createGraphicsPipeline();
+        createCommandPool();
+        createCommandBuffers();
+        createSyncObjects();
 
         mainLoop();
         cleanup();
@@ -48,7 +52,7 @@ private:
                                                           const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
                                                           void* pUserData)
     {
-        std::println(stderr, "[validation layer][{}]: {}", to_string(type), pCallbackData->pMessage);
+        std::println(stderr, "({} / {}) message -> {}", to_string(type), to_string(severity), pCallbackData->pMessage);
 
         return vk::False;
     }
@@ -139,6 +143,26 @@ private:
         instance = vk::raii::Instance{context, createInfo};
     }
 
+    void initVulkan()
+    {
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+
+        if (!glfwInit())
+        {
+            throw std::runtime_error{"GLFW Initialization failed."};
+        }
+
+        // GLFW was originally designed to work with OpenGL contexts,
+        // so we need to tell it not to create one.
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        // For now, we don't deal with resizable windows.
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+        window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Vulkan", nullptr, nullptr);
+
+        createInstance();
+    }
+
     void setupDebugMessenger()
     {
         if (!enableValidationLayers)
@@ -189,6 +213,7 @@ private:
         bool supportsRequiredFeatures =
             features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
             features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+            features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
             features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
         return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
@@ -211,7 +236,7 @@ private:
         // QUEUE FAMILY SELECTION //////////////////////////////////////////////////////////////////////////////////////
         std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
 
-        uint32_t queueIndex = ~0;
+        queueIndex = ~0;
         for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
         {
             if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
@@ -247,6 +272,7 @@ private:
                                 .shaderDrawParameters = true,
                             },
                             {
+                                .synchronization2 = true,
                                 .dynamicRendering = true,
                             },
                             {
@@ -470,7 +496,7 @@ private:
         };
 
         vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-            .blendEnable = vk::True,
+            .blendEnable = vk::False,
             .colorWriteMask = vk::ColorComponentFlagBits::eR |
                               vk::ColorComponentFlagBits::eG |
                               vk::ColorComponentFlagBits::eB |
@@ -520,24 +546,174 @@ private:
             vk::raii::Pipeline{device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>()};
     }
 
-    void initVulkan()
+    void createCommandPool()
     {
-        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+        vk::CommandPoolCreateInfo commandPoolCreateInfo{
+            .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+            .queueFamilyIndex = queueIndex,
+        };
 
-        if (!glfwInit())
+        commandPool = vk::raii::CommandPool(device, commandPoolCreateInfo);
+    }
+
+    void createCommandBuffers()
+    {
+        vk::CommandBufferAllocateInfo commandBufferAllocateInfo{
+            .commandPool = commandPool,
+            .level = vk::CommandBufferLevel::ePrimary,
+            .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
+        };
+
+        commandBuffers = std::move(vk::raii::CommandBuffers{device, commandBufferAllocateInfo});
+    }
+
+    void transition_image_layout(uint32_t imageIndex,
+                                 vk::ImageLayout old_layout,
+                                 vk::ImageLayout new_layout,
+                                 vk::AccessFlags2 src_access_mask,
+                                 vk::AccessFlags2 dst_access_mask,
+                                 vk::PipelineStageFlags2 src_stage_mask,
+                                 vk::PipelineStageFlags2 dst_stage_mask)
+    {
+        vk::ImageMemoryBarrier2 barrier = {.srcStageMask = src_stage_mask,
+                                           .srcAccessMask = src_access_mask,
+                                           .dstStageMask = dst_stage_mask,
+                                           .dstAccessMask = dst_access_mask,
+                                           .oldLayout = old_layout,
+                                           .newLayout = new_layout,
+                                           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                           .image = swapChainImages[imageIndex],
+                                           .subresourceRange = {
+                                               .aspectMask = vk::ImageAspectFlagBits::eColor,
+                                               .baseMipLevel = 0,
+                                               .levelCount = 1,
+                                               .baseArrayLayer = 0,
+                                               .layerCount = 1,
+                                           }};
+        vk::DependencyInfo dependency_info = {
+            .dependencyFlags = {},
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &barrier,
+        };
+        commandBuffers[frameIndex].pipelineBarrier2(dependency_info);
+    }
+
+    void recordCommandBuffer(uint32_t imageIndex)
+    {
+        auto& commandBuffer = commandBuffers[frameIndex];
+        commandBuffer.begin({});
+
+        transition_image_layout(imageIndex,
+                                vk::ImageLayout::eUndefined,
+                                vk::ImageLayout::eColorAttachmentOptimal,
+                                {},
+                                vk::AccessFlagBits2::eColorAttachmentWrite,
+                                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                                vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+
+        vk::ClearValue clearColor = vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
+        vk::RenderingAttachmentInfo renderingAttachmentInfo = {
+            .imageView = swapChainImageViews[imageIndex],
+            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = clearColor,
+        };
+
+        vk::RenderingInfo renderingInfo = {
+            .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &renderingAttachmentInfo,
+        };
+
+        commandBuffer.beginRendering(renderingInfo);
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+        // Because we are using dynamic states for scissor and viewport,
+        // we need to set them here.
+        commandBuffer.setViewport(0,
+                                  vk::Viewport{
+                                      .x = 0.f,
+                                      .y = 0.f,
+                                      .width = static_cast<float>(swapChainExtent.width),
+                                      .height = static_cast<float>(swapChainExtent.height),
+                                      .minDepth = 0.f,
+                                      .maxDepth = 1.f,
+                                  });
+        commandBuffer.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, swapChainExtent});
+
+        // LETS DRAW THE TRIANGLE!!!
+        commandBuffer.draw(3, 1, 0, 0);
+
+        commandBuffer.endRendering();
+
+        transition_image_layout(imageIndex,
+                                vk::ImageLayout::eColorAttachmentOptimal,
+                                vk::ImageLayout::ePresentSrcKHR,
+                                vk::AccessFlagBits2::eColorAttachmentWrite,
+                                {},
+                                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                                vk::PipelineStageFlagBits2::eBottomOfPipe);
+
+        commandBuffer.end();
+    }
+
+    void createSyncObjects()
+    {
+        assert(presentCompleteSemaphores.empty() && renderFinishedSemaphores.empty() && inflightFences.empty());
+
+        for (size_t i = 0; i < swapChainImages.size(); ++i)
         {
-            throw std::runtime_error{"GLFW Initialization failed."};
+            renderFinishedSemaphores.push_back(vk::raii::Semaphore(device, vk::SemaphoreCreateInfo{}));
         }
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            presentCompleteSemaphores.push_back(vk::raii::Semaphore(device, vk::SemaphoreCreateInfo{}));
+            inflightFences.push_back(
+                vk::raii::Fence(device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}));
+        }
+    }
 
-        // GLFW was originally designed to work with OpenGL contexts,
-        // so we need to tell it not to create one.
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        // For now, we don't deal with resizable windows.
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    void drawFrame()
+    {
+        auto fenceResult =
+            device.waitForFences(*inflightFences[frameIndex], vk::True, std::numeric_limits<uint64_t>::max());
+        if (fenceResult != vk::Result::eSuccess)
+        {
+            throw std::runtime_error("Failed to wait for fence");
+        }
+        device.resetFences(*inflightFences[frameIndex]);
 
-        window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Vulkan", nullptr, nullptr);
+        auto [result, imageIndex] = swapChain.acquireNextImage(
+            std::numeric_limits<uint64_t>::max(), *presentCompleteSemaphores[frameIndex], nullptr);
 
-        createInstance();
+        commandBuffers[frameIndex].reset();
+        recordCommandBuffer(imageIndex);
+
+        vk::PipelineStageFlags waitDestinationStageMask{vk::PipelineStageFlagBits::eColorAttachmentOutput};
+        vk::SubmitInfo submitInfo{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*presentCompleteSemaphores[frameIndex],
+            .pWaitDstStageMask = &waitDestinationStageMask,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &*commandBuffers[frameIndex],
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex],
+        };
+
+        graphicsQueue.submit(submitInfo, *inflightFences[frameIndex]);
+
+        const vk::PresentInfoKHR presentInfoKHR{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
+            .swapchainCount = 1,
+            .pSwapchains = &*swapChain,
+            .pImageIndices = &imageIndex,
+        };
+
+        result = graphicsQueue.presentKHR(presentInfoKHR);
+        frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void mainLoop()
@@ -545,7 +721,10 @@ private:
         while (!glfwWindowShouldClose(window))
         {
             glfwPollEvents();
+            drawFrame();
         }
+
+        device.waitIdle();
     }
 
     void cleanup()
@@ -555,14 +734,19 @@ private:
     }
 
 private:
+    // Basic Setup
     GLFWwindow* window{nullptr};
     vk::raii::Context context{};
     vk::raii::Instance instance{nullptr};
     vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr};
     vk::raii::SurfaceKHR surface{nullptr};
+
+    // Device Setup
     vk::raii::PhysicalDevice physicalDevice{nullptr};
     vk::raii::Device device{nullptr};
     vk::raii::Queue graphicsQueue{nullptr};
+
+    // Pipeline Setup
     vk::raii::SwapchainKHR swapChain{nullptr};
     vk::Extent2D swapChainExtent{};
     vk::SurfaceFormatKHR swapChainSurfaceFormat{};
@@ -570,6 +754,15 @@ private:
     std::vector<vk::raii::ImageView> swapChainImageViews{};
     vk::raii::PipelineLayout pipelineLayout{nullptr};
     vk::raii::Pipeline graphicsPipeline{nullptr};
+    vk::raii::CommandPool commandPool{nullptr};
+    std::vector<vk::raii::CommandBuffer> commandBuffers{};
+    uint32_t queueIndex{};
+
+    // Synchronization
+    std::vector<vk::raii::Semaphore> presentCompleteSemaphores{};
+    std::vector<vk::raii::Semaphore> renderFinishedSemaphores{};
+    std::vector<vk::raii::Fence> inflightFences{};
+    uint32_t frameIndex{0};
 };
 
 int main()
