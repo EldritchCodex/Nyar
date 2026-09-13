@@ -1,9 +1,10 @@
-# Nyar
-A Vulkan-based real-time renderer.
+## Nyar: A Vulkan real-time renderer
 
-This project is designed as a separate module for the [Nodens](https://github.com/EldritchCodex/Nodens) framework. Its design and implementation draw from established principles in real-time rendering and modern engine architecture.
+This project is designed to work as a separate module for the [Nodens](https://github.com/EldritchCodex/Nodens) framework. 
+Its design and implementation draw from established principles in real-time rendering and modern engine architecture and tools (e.g. Slang shaders, dynamic rendering, etc.)
 
 ## Development
+![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/1)
 
 - **Immediate Goal:** Follow and complete the official [Khronos Vulkan "Drawing a triangle" tutorial](https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html) to establish a solid baseline.
 - **Future Direction:** Incrementally refactor and morph the working tutorial code into a dedicated renderer API.
