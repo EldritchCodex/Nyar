@@ -13,8 +13,8 @@
 import vulkan;
 import std;
 
-constexpr uint32_t WINDOW_WIDTH{400};
-constexpr uint32_t WINDOW_HEIGHT{300};
+constexpr uint32_t WINDOW_WIDTH{100};
+constexpr uint32_t WINDOW_HEIGHT{50};
 constexpr int MAX_FRAMES_IN_FLIGHT{2};
 
 const std::vector<char const*> validationLayers{"VK_LAYER_KHRONOS_validation"};
@@ -30,7 +30,8 @@ class HelloTriangleApplication
 public:
     void run()
     {
-        initVulkan();
+        initWindow();
+        createInstance();
         setupDebugMessenger();
         createSurface();
         pickPhysicalDevice();
@@ -143,7 +144,13 @@ private:
         instance = vk::raii::Instance{context, createInfo};
     }
 
-    void initVulkan()
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
+    {
+        auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        app->framebufferResized = true;
+    }
+
+    void initWindow()
     {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
 
@@ -156,11 +163,11 @@ private:
         // so we need to tell it not to create one.
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         // For now, we don't deal with resizable windows.
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
         window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Vulkan", nullptr, nullptr);
-
-        createInstance();
+        glfwSetWindowUserPointer(window, this);
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
     }
 
     void setupDebugMessenger()
@@ -683,10 +690,21 @@ private:
         {
             throw std::runtime_error("Failed to wait for fence");
         }
-        device.resetFences(*inflightFences[frameIndex]);
 
         auto [result, imageIndex] = swapChain.acquireNextImage(
             std::numeric_limits<uint64_t>::max(), *presentCompleteSemaphores[frameIndex], nullptr);
+        if (result == vk::Result::eErrorOutOfDateKHR)
+        {
+            recreateSwapChain();
+            return;
+        }
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+        {
+            assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
+            throw std::runtime_error("failed to acquire swap chain image");
+        }
+
+        device.resetFences(*inflightFences[frameIndex]);
 
         commandBuffers[frameIndex].reset();
         recordCommandBuffer(imageIndex);
@@ -713,7 +731,48 @@ private:
         };
 
         result = graphicsQueue.presentKHR(presentInfoKHR);
+
+        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized)
+        {
+            framebufferResized = false;
+            recreateSwapChain();
+            return;
+        }
+        else
+        {
+            assert(result == vk::Result::eSuccess);
+        }
+
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void cleanupSwapChain()
+    {
+        swapChainImageViews.clear();
+        swapChain = nullptr;
+    }
+
+    void recreateSwapChain()
+    {
+        // Handle window minimization
+        int width{0}, height{0};
+        glfwGetFramebufferSize(window, &width, &height);
+        while ((width == 0 || height == 0) && !glfwWindowShouldClose(window))
+        {
+            glfwGetFramebufferSize(window, &width, &height);
+            glfwWaitEvents();
+        }
+        if (glfwWindowShouldClose(window))
+        {
+            return;
+        }
+
+        device.waitIdle();
+
+        cleanupSwapChain();
+
+        createSwapChain();
+        createImageViews();
     }
 
     void mainLoop()
@@ -729,6 +788,8 @@ private:
 
     void cleanup()
     {
+        cleanupSwapChain();
+
         glfwDestroyWindow(window);
         glfwTerminate();
     }
@@ -763,6 +824,9 @@ private:
     std::vector<vk::raii::Semaphore> renderFinishedSemaphores{};
     std::vector<vk::raii::Fence> inflightFences{};
     uint32_t frameIndex{0};
+
+    // Resize
+    bool framebufferResized{false};
 };
 
 int main()
