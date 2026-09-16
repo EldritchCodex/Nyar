@@ -1,4 +1,8 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) 
+
+![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/1?style=flat-square&link=https%3A%2F%2Fgithub.com%2FEldritchCodex%2FNyar%2Fmilestone%2F1)
+![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/3?style=flat-square&link=https%3A%2F%2Fgithub.com%2FEldritchCodex%2FNyar%2Fmilestone%2F3)
+![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/2?style=flat-square&link=https%3A%2F%2Fgithub.com%2FEldritchCodex%2FNyar%2Fmilestone%2F2)
 
 > ⚠️ **Development Status:** Nyar is currently in **active, experimental development** with no stable release. It serves primarily as a learning ground and playground for exploring real-time rendering Vulkan architecture and modern C++20/23 features. APIs are highly subject to change.
 
@@ -9,7 +13,6 @@ Its design and implementation draw from established principles in real-time rend
 
 
 ## Development
-![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/1?style=flat-square&link=https%3A%2F%2Fgithub.com%2FEldritchCodex%2FNyar%2Fmilestone%2F1)
 
 - **Immediate Goal:** Follow and complete the official [Khronos Vulkan "Drawing a triangle" tutorial](https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html) to establish a solid baseline.
 - **Future Direction:** Incrementally refactor and morph the working tutorial code into a dedicated renderer API.
