@@ -1,3 +1,7 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> ⚠️ **Development Status:** Nyar is currently in **active, experimental development** with no stable release. It serves primarily as a learning ground and playground for exploring real-time rendering Vulkan architecture and modern C++20/23 features. APIs are highly subject to change.
+
 ## Nyar: A Vulkan real-time renderer
 
 This project is designed to work as a separate module for the [Nodens](https://github.com/EldritchCodex/Nodens) framework. 
