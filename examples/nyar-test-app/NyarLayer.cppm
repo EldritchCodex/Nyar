@@ -212,59 +212,11 @@ private:
             vk::raii::Pipeline{*device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>()};
     }
 
-    /// @brief Inserts synchronization2 barrier for one swapchain image transition.
-    /// @param imageIndex Swapchain image to transition.
-    /// @param old_layout Current image layout.
-    /// @param new_layout Required image layout.
-    /// @param src_access_mask Access scope before transition.
-    /// @param dst_access_mask Access scope after transition.
-    /// @param src_stage_mask Pipeline stage before transition.
-    /// @param dst_stage_mask Pipeline stage after transition.
-    void transition_image_layout(uint32_t imageIndex,
-                                 vk::ImageLayout old_layout,
-                                 vk::ImageLayout new_layout,
-                                 vk::AccessFlags2 src_access_mask,
-                                 vk::AccessFlags2 dst_access_mask,
-                                 vk::PipelineStageFlags2 src_stage_mask,
-                                 vk::PipelineStageFlags2 dst_stage_mask)
-    {
-        vk::ImageMemoryBarrier2 barrier = {.srcStageMask = src_stage_mask,
-                                           .srcAccessMask = src_access_mask,
-                                           .dstStageMask = dst_stage_mask,
-                                           .dstAccessMask = dst_access_mask,
-                                           .oldLayout = old_layout,
-                                           .newLayout = new_layout,
-                                           .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-                                           .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-                                           .image = swapChainImages->at(imageIndex),
-                                           .subresourceRange = {
-                                               .aspectMask = vk::ImageAspectFlagBits::eColor,
-                                               .baseMipLevel = 0,
-                                               .levelCount = 1,
-                                               .baseArrayLayer = 0,
-                                               .layerCount = 1,
-                                           }};
-        vk::DependencyInfo dependency_info = {
-            .dependencyFlags = {},
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &barrier,
-        };
-        nodensVulkanContext->GetActiveCommandBuffer().pipelineBarrier2(dependency_info);
-    }
-
-    /// @brief Records clear, triangle draw, and present transition for one image.
+    /// @brief Records clear and triangle draw for one swapchain image.
     /// @param imageIndex Swapchain image rendered by the command buffer.
     void recordCommandBuffer(uint32_t imageIndex)
     {
         const auto& commandBuffer = nodensVulkanContext->GetActiveCommandBuffer();
-
-        transition_image_layout(imageIndex,
-                                vk::ImageLayout::eUndefined,
-                                vk::ImageLayout::eColorAttachmentOptimal,
-                                {},
-                                vk::AccessFlagBits2::eColorAttachmentWrite,
-                                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                                vk::PipelineStageFlagBits2::eColorAttachmentOutput);
 
         vk::ClearValue clearColor = vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
         vk::RenderingAttachmentInfo renderingAttachmentInfo = {
@@ -300,26 +252,20 @@ private:
         commandBuffer.draw(3, 1, 0, 0);
 
         commandBuffer.endRendering();
-
-        transition_image_layout(imageIndex,
-                                vk::ImageLayout::eColorAttachmentOptimal,
-                                vk::ImageLayout::ePresentSrcKHR,
-                                vk::AccessFlagBits2::eColorAttachmentWrite,
-                                {},
-                                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                                vk::PipelineStageFlagBits2::eBottomOfPipe);
     }
 
-    /// @brief Records one frame through Nodens.
+    /// @brief Records scene commands into Nodens' active frame.
+    /// @details Nodens owns acquisition, layout transitions, overlays, submission, and presentation;
+    ///          Nyar only appends its scene commands here.
     void drawFrame()
     {
-        const auto imageIndex = nodensVulkanContext->BeginFrame();
-        if (!imageIndex)
+        if (!nodensVulkanContext->IsFrameActive())
             return;
 
+        const auto imageIndex = nodensVulkanContext->GetCurrentImageIndex();
         swapChainExtent = nodensVulkanContext->GetSwapchainExtent();
         swapChainSurfaceFormat = nodensVulkanContext->GetSwapchainSurfaceFormat();
-        recordCommandBuffer(*imageIndex);
+        recordCommandBuffer(imageIndex);
     }
 
     /// @brief Stops GPU work and releases Vulkan rendering resources.
