@@ -49,7 +49,7 @@ private:
             throw std::runtime_error{"NyarLayer requires a Nodens Vulkan window"};
 
         device = &nodensVulkanContext->GetDeviceRAII();
-        queueIndex = nodensVulkanContext->GetGraphicsQueueFamilyIndex();
+
         swapChainImages = &nodensVulkanContext->GetSwapchainImages();
         swapChainImageViews = &nodensVulkanContext->GetSwapchainImageViews();
         swapChainExtent = nodensVulkanContext->GetSwapchainExtent();
@@ -212,29 +212,6 @@ private:
             vk::raii::Pipeline{*device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>()};
     }
 
-    /// @brief Creates resettable command pool for selected graphics queue family.
-    void createCommandPool()
-    {
-        vk::CommandPoolCreateInfo commandPoolCreateInfo{
-            .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-            .queueFamilyIndex = queueIndex,
-        };
-
-        commandPool = vk::raii::CommandPool(*device, commandPoolCreateInfo);
-    }
-
-    /// @brief Allocates one primary command buffer per frame in flight.
-    void createCommandBuffers()
-    {
-        vk::CommandBufferAllocateInfo commandBufferAllocateInfo{
-            .commandPool = commandPool,
-            .level = vk::CommandBufferLevel::ePrimary,
-            .commandBufferCount = nodensVulkanContext->GetFramesInFlight(),
-        };
-
-        commandBuffers = std::move(vk::raii::CommandBuffers{*device, commandBufferAllocateInfo});
-    }
-
     /// @brief Inserts synchronization2 barrier for one swapchain image transition.
     /// @param imageIndex Swapchain image to transition.
     /// @param old_layout Current image layout.
@@ -272,15 +249,14 @@ private:
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &barrier,
         };
-        commandBuffers[nodensVulkanContext->GetCurrentFrameIndex()].pipelineBarrier2(dependency_info);
+        nodensVulkanContext->GetActiveCommandBuffer().pipelineBarrier2(dependency_info);
     }
 
     /// @brief Records clear, triangle draw, and present transition for one image.
     /// @param imageIndex Swapchain image rendered by the command buffer.
     void recordCommandBuffer(uint32_t imageIndex)
     {
-        auto& commandBuffer = commandBuffers[nodensVulkanContext->GetCurrentFrameIndex()];
-        commandBuffer.begin({});
+        const auto& commandBuffer = nodensVulkanContext->GetActiveCommandBuffer();
 
         transition_image_layout(imageIndex,
                                 vk::ImageLayout::eUndefined,
@@ -332,11 +308,9 @@ private:
                                 {},
                                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                                 vk::PipelineStageFlagBits2::eBottomOfPipe);
-
-        commandBuffer.end();
     }
 
-    /// @brief Records and submits one frame through Nodens.
+    /// @brief Records one frame through Nodens.
     void drawFrame()
     {
         const auto imageIndex = nodensVulkanContext->BeginFrame();
@@ -345,10 +319,7 @@ private:
 
         swapChainExtent = nodensVulkanContext->GetSwapchainExtent();
         swapChainSurfaceFormat = nodensVulkanContext->GetSwapchainSurfaceFormat();
-        const auto frameIndex = nodensVulkanContext->GetCurrentFrameIndex();
-        commandBuffers[frameIndex].reset();
         recordCommandBuffer(*imageIndex);
-        nodensVulkanContext->EndFrame(*commandBuffers[frameIndex], *imageIndex);
     }
 
     /// @brief Stops GPU work and releases Vulkan rendering resources.
@@ -368,7 +339,4 @@ private:
     const std::vector<vk::raii::ImageView>* swapChainImageViews{nullptr}; ///< Borrowed image views.
     vk::raii::PipelineLayout pipelineLayout{nullptr};                     ///< Empty tutorial pipeline layout.
     vk::raii::Pipeline graphicsPipeline{nullptr};                         ///< Triangle graphics pipeline.
-    vk::raii::CommandPool commandPool{nullptr};                           ///< Pool for graphics command buffers.
-    std::vector<vk::raii::CommandBuffer> commandBuffers{};                ///< Per-frame command buffers.
-    uint32_t queueIndex{}; ///< Selected graphics/presentation queue family.
 };

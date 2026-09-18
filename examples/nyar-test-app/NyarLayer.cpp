@@ -14,8 +14,6 @@ void NyarLayer::OnAttach()
 {
     attachToNodensWindow();
     createGraphicsPipeline();
-    createCommandPool();
-    createCommandBuffers();
 }
 
 /// @brief Releases Vulkan rendering resources after layer removal.
