@@ -22,7 +22,7 @@ class NyarTestApp : public Nodens::Application
 {
 public:
     /// Application configuration passed to the Nodens base class.
-    static inline const Nodens::ApplicationSpecification appSpecifications = {
+    static inline const Nodens::FApplicationSpecification appSpecifications = {
         .Name = "Nyar Vulkan Development",
         .WindowWidth = 800,
         .WindowHeight = 600,

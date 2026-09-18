@@ -36,7 +36,7 @@ constexpr bool enableValidationLayers{true};
 ///          release most objects, while `cleanup()` waits for GPU work before
 ///          destroying GLFW.
 /// @ingroup Examples
-export class NyarLayer : public Nodens::Layer
+export class NyarLayer : public Nodens::ILayer
 {
 public:
     /// @brief Constructs an uninitialized layer.
