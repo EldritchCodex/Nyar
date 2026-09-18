@@ -6,15 +6,14 @@
 /// @ingroup Examples
 
 module;
-#include <GLFW/glfw3.h>
 #include <cassert>
+#include <cstdint>
 
 export module NyarLayer;
 import Nodens.VulkanContext;
 import nodens;
 import std;
 
-constexpr int MAX_FRAMES_IN_FLIGHT{2}; ///< Number of CPU frames allowed in flight.
 
 /// @brief Nodens layer that owns tutorial Vulkan rendering resources.
 /// @details Nodens owns the GLFW window and Vulkan platform resources. This layer
@@ -24,7 +23,7 @@ export class NyarLayer : public Nodens::ILayer
 {
 public:
     /// @brief Constructs an uninitialized layer.
-    /// @details `OnAttach()` borrows Nodens window and Vulkan state before
+    /// @details `OnAttach()` borrows Nodens Vulkan state before
     ///          creating Nyar rendering resources.
     NyarLayer() {};
     ~NyarLayer() override = default;
@@ -41,21 +40,17 @@ public:
     // void OnImGuiRender(Nodens::TimeStep ts) override;
 
 private:
-    /// @brief Borrows Nodens window, Vulkan context, and swapchain resources.
+    /// @brief Borrows Nodens Vulkan context and swapchain resources.
     void attachToNodensWindow()
     {
         auto& nodensWindow = Nodens::Application::Get().GetWindow();
-        window = static_cast<GLFWwindow*>(nodensWindow.GetNativeWindow());
-
         auto* graphicsContext = nodensWindow.GetGraphicsContext();
         nodensVulkanContext = dynamic_cast<Nodens::VulkanContext*>(graphicsContext);
         if (!nodensVulkanContext)
             throw std::runtime_error{"NyarLayer requires a Nodens Vulkan window"};
 
         device = &nodensVulkanContext->GetDeviceRAII();
-        graphicsQueue = &nodensVulkanContext->GetGraphicsQueueRAII();
         queueIndex = nodensVulkanContext->GetGraphicsQueueFamilyIndex();
-        swapChain = &nodensVulkanContext->GetSwapchainRAII();
         swapChainImages = &nodensVulkanContext->GetSwapchainImages();
         swapChainImageViews = &nodensVulkanContext->GetSwapchainImageViews();
         swapChainExtent = nodensVulkanContext->GetSwapchainExtent();
@@ -235,7 +230,7 @@ private:
         vk::CommandBufferAllocateInfo commandBufferAllocateInfo{
             .commandPool = commandPool,
             .level = vk::CommandBufferLevel::ePrimary,
-            .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
+            .commandBufferCount = nodensVulkanContext->GetFramesInFlight(),
         };
 
         commandBuffers = std::move(vk::raii::CommandBuffers{*device, commandBufferAllocateInfo});
@@ -278,14 +273,14 @@ private:
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &barrier,
         };
-        commandBuffers[frameIndex].pipelineBarrier2(dependency_info);
+        commandBuffers[nodensVulkanContext->GetCurrentFrameIndex()].pipelineBarrier2(dependency_info);
     }
 
     /// @brief Records clear, triangle draw, and present transition for one image.
     /// @param imageIndex Swapchain image rendered by the command buffer.
     void recordCommandBuffer(uint32_t imageIndex)
     {
-        auto& commandBuffer = commandBuffers[frameIndex];
+        auto& commandBuffer = commandBuffers[nodensVulkanContext->GetCurrentFrameIndex()];
         commandBuffer.begin({});
 
         transition_image_layout(imageIndex,
@@ -342,129 +337,35 @@ private:
         commandBuffer.end();
     }
 
-    /// @brief Creates acquire/present semaphores and per-frame fences.
-    void createSyncObjects()
-    {
-        assert(presentCompleteSemaphores.empty() && renderFinishedSemaphores.empty() && inflightFences.empty());
 
-        for (size_t i = 0; i < swapChainImages->size(); ++i)
-        {
-            renderFinishedSemaphores.push_back(vk::raii::Semaphore(*device, vk::SemaphoreCreateInfo{}));
-        }
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-        {
-            presentCompleteSemaphores.push_back(vk::raii::Semaphore(*device, vk::SemaphoreCreateInfo{}));
-            inflightFences.push_back(
-                vk::raii::Fence(*device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}));
-        }
-    }
-
-    /// @brief Acquires, records, submits, and presents one frame.
+    /// @brief Records and submits one frame through Nodens.
     void drawFrame()
     {
-        int framebufferWidth{0};
-        int framebufferHeight{0};
-        glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
-        if (framebufferWidth == 0 || framebufferHeight == 0)
+        const auto imageIndex = nodensVulkanContext->BeginFrame();
+        if (!imageIndex)
             return;
 
-        framebufferResized = framebufferResized ||
-                             static_cast<uint32_t>(framebufferWidth) != swapChainExtent.width ||
-                             static_cast<uint32_t>(framebufferHeight) != swapChainExtent.height;
-
-        auto fenceResult =
-            device->waitForFences(*inflightFences[frameIndex], vk::True, std::numeric_limits<uint64_t>::max());
-        if (fenceResult != vk::Result::eSuccess)
-        {
-            throw std::runtime_error("Failed to wait for fence");
-        }
-
-        auto [result, imageIndex] = swapChain->acquireNextImage(
-            std::numeric_limits<uint64_t>::max(), *presentCompleteSemaphores[frameIndex], nullptr);
-        if (result == vk::Result::eErrorOutOfDateKHR)
-        {
-            recreateSwapChain();
-            return;
-        }
-        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
-        {
-            assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
-            throw std::runtime_error("failed to acquire swap chain image");
-        }
-
-        device->resetFences(*inflightFences[frameIndex]);
-
-        commandBuffers[frameIndex].reset();
-        recordCommandBuffer(imageIndex);
-
-        vk::PipelineStageFlags waitDestinationStageMask{vk::PipelineStageFlagBits::eColorAttachmentOutput};
-        vk::SubmitInfo submitInfo{
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*presentCompleteSemaphores[frameIndex],
-            .pWaitDstStageMask = &waitDestinationStageMask,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &*commandBuffers[frameIndex],
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex],
-        };
-
-        graphicsQueue->submit(submitInfo, *inflightFences[frameIndex]);
-
-        const vk::PresentInfoKHR presentInfoKHR{
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
-            .swapchainCount = 1,
-            .pSwapchains = &**swapChain,
-            .pImageIndices = &imageIndex,
-        };
-
-        result = graphicsQueue->presentKHR(presentInfoKHR);
-
-        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized)
-        {
-            recreateSwapChain();
-            return;
-        }
-        else
-        {
-            assert(result == vk::Result::eSuccess);
-        }
-
-        frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
-    }
-
-
-    /// @brief Rebuilds swapchain and image views after surface changes.
-    void recreateSwapChain()
-    {
-        int width{0};
-        int height{0};
-        glfwGetFramebufferSize(window, &width, &height);
-        if (width == 0 || height == 0)
-            return;
-
-        device->waitIdle();
-
-        nodensVulkanContext->RecreateSwapchain();
         swapChainExtent = nodensVulkanContext->GetSwapchainExtent();
         swapChainSurfaceFormat = nodensVulkanContext->GetSwapchainSurfaceFormat();
-        framebufferResized = false;
+        const auto frameIndex = nodensVulkanContext->GetCurrentFrameIndex();
+        commandBuffers[frameIndex].reset();
+        recordCommandBuffer(*imageIndex);
+        nodensVulkanContext->EndFrame(*commandBuffers[frameIndex], *imageIndex);
     }
+
+
 
     /// @brief Stops GPU work and releases Vulkan rendering resources.
     void cleanup()
     {
-        device->waitIdle();
+        nodensVulkanContext->WaitIdle();
     }
 
 private:
-    GLFWwindow* window{nullptr};                         ///< Borrowed GLFW window owned by Nodens.
     Nodens::VulkanContext* nodensVulkanContext{nullptr}; ///< Borrowed Nodens Vulkan context.
 
     const vk::raii::Device* device{nullptr};                ///< Borrowed logical device owned by Nodens.
-    const vk::raii::Queue* graphicsQueue{nullptr};          ///< Borrowed queue owned by Nodens.
 
-    const vk::raii::SwapchainKHR* swapChain{nullptr}; ///< Borrowed swapchain owned by Nodens.
     vk::Extent2D swapChainExtent{};                         ///< Current swapchain dimensions.
     vk::SurfaceFormatKHR swapChainSurfaceFormat{};          ///< Current swapchain format.
     const std::vector<vk::Image>* swapChainImages{nullptr}; ///< Borrowed swapchain image handles.
@@ -475,10 +376,5 @@ private:
     std::vector<vk::raii::CommandBuffer> commandBuffers{};  ///< Per-frame command buffers.
     uint32_t queueIndex{};                                  ///< Selected graphics/presentation queue family.
 
-    std::vector<vk::raii::Semaphore> presentCompleteSemaphores{}; ///< Image-acquire signals.
-    std::vector<vk::raii::Semaphore> renderFinishedSemaphores{};  ///< Render-complete signals.
-    std::vector<vk::raii::Fence> inflightFences{};                ///< CPU/GPU frame fences.
-    uint32_t frameIndex{0};                                       ///< Current frame-in-flight index.
 
-    bool framebufferResized{false}; ///< Set by GLFW callback and consumed by drawFrame().
 };

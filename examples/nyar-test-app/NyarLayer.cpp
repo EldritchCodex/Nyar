@@ -5,7 +5,6 @@
 /// @ingroup Examples
 
 module;
-#include <GLFW/glfw3.h>
 
 module NyarLayer;
 import nodens;
@@ -17,7 +16,6 @@ void NyarLayer::OnAttach()
     createGraphicsPipeline();
     createCommandPool();
     createCommandBuffers();
-    createSyncObjects();
 }
 
 /// @brief Releases Vulkan rendering resources after layer removal.
