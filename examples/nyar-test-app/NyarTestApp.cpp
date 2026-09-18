@@ -14,9 +14,8 @@ import vulkan;
 import nodens;
 
 /// @brief Root Nodens application for the Vulkan development example.
-/// @details `IsHeadless` remains enabled because the layer creates and owns
-///          its GLFW window directly. Nodens window integration is tracked
-///          separately.
+/// @details Nodens creates the Vulkan-backed GLFW window. Nyar borrows its
+///          instance and surface for rendering.
 /// @ingroup Examples
 class NyarTestApp : public Nodens::Application
 {
@@ -27,7 +26,8 @@ public:
         .WindowWidth = 800,
         .WindowHeight = 600,
         .EnableGUI = false,
-        .IsHeadless = true,
+        .IsHeadless = false,
+        .GraphicsAPI = Nodens::EGraphicsAPI::Vulkan,
     };
 
     /// @brief Constructs application and installs the Vulkan layer.

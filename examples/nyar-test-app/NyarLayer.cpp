@@ -1,8 +1,7 @@
 /// @file NyarLayer.cpp
 /// @brief Connects the Vulkan tutorial layer to Nodens.
-/// @details GLFW remains layer-owned while Nodens runs this example headless.
-///          The layer forwards window-close state into Nodens until
-///          Vulkan-backed windows become part of Nodens' lifecycle.
+/// @details Nodens owns the GLFW window, instance, and surface. The layer owns
+///          Vulkan rendering resources built on those borrowed objects.
 /// @ingroup Examples
 
 module;
@@ -11,13 +10,10 @@ module;
 module NyarLayer;
 import nodens;
 
-/// @brief Initializes window and Vulkan resources in dependency order.
+/// @brief Attaches to Nodens Vulkan state and initializes rendering resources.
 void NyarLayer::OnAttach()
 {
-    initWindow();
-    createInstance();
-    setupDebugMessenger();
-    createSurface();
+    attachToNodensWindow();
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
@@ -28,23 +24,14 @@ void NyarLayer::OnAttach()
     createSyncObjects();
 }
 
-/// @brief Releases Vulkan and GLFW resources after layer removal.
+/// @brief Releases Vulkan rendering resources after layer removal.
 void NyarLayer::OnDetach()
 {
     cleanup();
 }
 
-/// @brief Polls GLFW, forwards close requests, and submits one frame.
+/// @brief Submits one rendered frame.
 void NyarLayer::OnUpdate(Nodens::TimeStep ts)
 {
-    // Nodens is headless, so translate GLFW close state manually.
-    if (glfwWindowShouldClose(window))
-    {
-        Nodens::RoutedInputEvent event{.Event = Nodens::InputEvents::WindowClose{}};
-        Nodens::Application::Get().OnInputEvent(event);
-        return;
-    }
-
-    glfwPollEvents();
     drawFrame();
 }

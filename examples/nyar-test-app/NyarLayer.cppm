@@ -1,216 +1,60 @@
 /// @file NyarLayer.cppm
 /// @brief Vulkan Hello Triangle layer used as Nyar's integration baseline.
-/// @details This module follows the Khronos tutorial closely. It owns the
-///          temporary GLFW/Vulkan path while `src/nyar.cppm` evolves toward
-///          a renderer API.
+/// @details This module follows the Khronos tutorial closely. Nodens owns
+///          window and Vulkan platform state while `src/nyar.cppm` evolves
+///          toward a renderer API.
 /// @ingroup Examples
 
 module;
-#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <cassert>
-#include <cstdio>
-#include <cstdlib>
-#include <vulkan/vk_platform.h>
 
 export module NyarLayer;
-import vulkan;
+import Nodens.VulkanContext;
 import nodens;
 import std;
 
-constexpr uint32_t WINDOW_WIDTH{100};  ///< Initial window width in pixels.
-constexpr uint32_t WINDOW_HEIGHT{50};  ///< Initial window height in pixels.
 constexpr int MAX_FRAMES_IN_FLIGHT{2}; ///< Number of CPU frames allowed in flight.
 
-const std::vector<char const*> validationLayers{
-    "VK_LAYER_KHRONOS_validation"}; ///< Validation layer used by debug builds.
-
-#ifdef NDEBUG
-constexpr bool enableValidationLayers{false};
-#else
-constexpr bool enableValidationLayers{true};
-#endif
-
-/// @brief Nodens layer that owns tutorial window and Vulkan resources.
-/// @details Resource creation follows Vulkan dependency order. RAII handles
-///          release most objects, while `cleanup()` waits for GPU work before
-///          destroying GLFW.
+/// @brief Nodens layer that owns tutorial Vulkan rendering resources.
+/// @details Nodens owns the GLFW window, Vulkan instance, and surface. This layer
+///          borrows those objects and owns the device, swapchain, pipeline, and
+///          frame resources.
 /// @ingroup Examples
 export class NyarLayer : public Nodens::ILayer
 {
 public:
     /// @brief Constructs an uninitialized layer.
-    /// @details `OnAttach()` performs window and Vulkan setup.
+    /// @details `OnAttach()` borrows Nodens window and Vulkan state before
+    ///          creating Nyar rendering resources.
     NyarLayer() {};
     ~NyarLayer() override = default;
 
-    /// @brief Creates window, Vulkan objects, pipeline, command buffers, and sync state.
+    /// @brief Attaches to Nodens Vulkan state and creates rendering resources.
     void OnAttach() override;
 
-    /// @brief Waits for GPU work and releases owned window/Vulkan resources.
+    /// @brief Waits for GPU work and releases owned rendering resources.
     void OnDetach() override;
 
-    /// @brief Polls window events and renders one frame.
+    /// @brief Records and submits one rendered frame.
     /// @param ts Frame delta time supplied by Nodens.
     void OnUpdate(Nodens::TimeStep ts) override;
     // void OnImGuiRender(Nodens::TimeStep ts) override;
 
 private:
-    /// @brief Prints validation messages without requesting callback termination.
-    /// @param severity Message severity reported by Vulkan.
-    /// @param type Message categories reported by Vulkan.
-    /// @param pCallbackData Message text and metadata.
-    /// @param pUserData Reserved user data pointer.
-    static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-                                                          vk::DebugUtilsMessageTypeFlagsEXT type,
-                                                          const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                                          void* pUserData)
+    /// @brief Borrows Nodens' window and Vulkan instance/surface.
+    void attachToNodensWindow()
     {
-        std::println(stderr, "({} / {}) message -> {}", to_string(type), to_string(severity), pCallbackData->pMessage);
+        auto& nodensWindow = Nodens::Application::Get().GetWindow();
+        window = static_cast<GLFWwindow*>(nodensWindow.GetNativeWindow());
 
-        return vk::False;
-    }
+        auto* graphicsContext = nodensWindow.GetGraphicsContext();
+        nodensVulkanContext = dynamic_cast<Nodens::VulkanContext*>(graphicsContext);
+        if (!nodensVulkanContext)
+            throw std::runtime_error{"NyarLayer requires a Nodens Vulkan window"};
 
-    /// @brief Collects GLFW surface extensions and optional debug-utils extension.
-    /// @return Extension names required to create the instance.
-    std::vector<const char*> getRequiredInstanceExtensionsNames()
-    {
-        // GLFW determines platform-specific extensions required by its surface.
-        uint32_t glfwExtensionCount{0};
-        auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-        if (enableValidationLayers)
-        {
-            extensions.push_back(vk::EXTDebugUtilsExtensionName);
-        }
-
-        return extensions;
-    }
-
-    /// @brief Validates requested extensions/layers, then creates Vulkan instance.
-    void createInstance()
-    {
-        // Application metadata and requested Vulkan API version.
-        constexpr vk::ApplicationInfo appInfo{.pApplicationName = "Hello Triangle",
-                                              .applicationVersion = vk::makeApiVersion(0, 0, 0, 0),
-                                              .pEngineName = "Nyar",
-                                              .engineVersion = vk::makeApiVersion(0, 0, 0, 0),
-                                              .apiVersion = vk::ApiVersion14};
-
-        // Enumerate extensions before checking GLFW and debug-utils requirements.
-        auto availableExtensionsNames =
-            context.enumerateInstanceExtensionProperties() |
-            std::views::transform([](const auto& extentionProperty)
-                                  { return std::string_view{extentionProperty.extensionName}; });
-        std::println("Available extensions:");
-        for (auto name : availableExtensionsNames)
-        {
-            std::println("\t{}", name);
-        }
-
-        // Check required extensions.
-        auto requiredExtensionsNames = getRequiredInstanceExtensionsNames();
-        auto unsupportedExtensionIt =
-            std::ranges::find_if(requiredExtensionsNames,
-                                 [&availableExtensionsNames](std::string_view requiredName)
-                                 { return !std::ranges::contains(availableExtensionsNames, requiredName); });
-        if (unsupportedExtensionIt != requiredExtensionsNames.end())
-        {
-            throw std::runtime_error{"Required GLFW extension not supported: " + std::string{*unsupportedExtensionIt}};
-        }
-
-        // Enumerate layers before enabling validation.
-        auto layersNames =
-            context.enumerateInstanceLayerProperties() |
-            std::views::transform([](const auto& layerProperty) { return std::string_view{layerProperty.layerName}; });
-        std::println("Available layers:");
-        for (auto name : layersNames)
-        {
-            std::println("\t{}", name);
-        }
-
-        // Check required layers.
-        std::vector<char const*> requiredLayers{};
-        if (enableValidationLayers)
-        {
-            requiredLayers.assign(validationLayers.begin(), validationLayers.end());
-        }
-        auto unsupportedLayerIt = std::ranges::find_if(
-            requiredLayers, [&](std::string_view req) { return !std::ranges::contains(layersNames, req); });
-
-        if (unsupportedLayerIt != requiredLayers.end())
-        {
-            throw std::runtime_error{"Required layer not supported " + std::string{*unsupportedLayerIt}};
-        }
-
-        // Create instance after all requested capabilities pass validation.
-        vk::InstanceCreateInfo createInfo{.pApplicationInfo = &appInfo,
-                                          .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
-                                          .ppEnabledLayerNames = requiredLayers.data(),
-                                          .enabledExtensionCount =
-                                              static_cast<uint32_t>(requiredExtensionsNames.size()),
-                                          .ppEnabledExtensionNames = requiredExtensionsNames.data()};
-
-        instance = vk::raii::Instance{context, createInfo};
-    }
-
-    /// @brief Marks swapchain for recreation after framebuffer size changes.
-    /// @param window GLFW window whose framebuffer changed.
-    /// @param width New framebuffer width in pixels.
-    /// @param height New framebuffer height in pixels.
-    static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
-    {
-        auto app = reinterpret_cast<NyarLayer*>(glfwGetWindowUserPointer(window));
-        app->framebufferResized = true;
-    }
-
-    /// @brief Initializes GLFW and creates a context-free Vulkan window.
-    void initWindow()
-    {
-        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
-
-        if (!glfwInit())
-        {
-            throw std::runtime_error{"GLFW Initialization failed."};
-        }
-
-        // GLFW was originally designed to work with OpenGL contexts,
-        // so we need to tell it not to create one.
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        // For now, we don't deal with resizable windows.
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-        window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Vulkan", nullptr, nullptr);
-        glfwSetWindowUserPointer(window, this);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-    }
-
-    /// @brief Installs validation callback when validation layers are enabled.
-    void setupDebugMessenger()
-    {
-        if (!enableValidationLayers)
-            return;
-
-        vk::DebugUtilsMessageSeverityFlagsEXT severityFlags{vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                                                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError};
-        vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags{vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                                                           vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-                                                           vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral};
-        vk::DebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfoEXT{
-            .messageSeverity = severityFlags, .messageType = messageTypeFlags, .pfnUserCallback = &debugCallback};
-        debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
-    }
-
-    /// @brief Bridges GLFW's native handle into a Vulkan presentation surface.
-    void createSurface()
-    {
-        VkSurfaceKHR rawSurface{VK_NULL_HANDLE};
-        if (glfwCreateWindowSurface(*instance, window, nullptr, &rawSurface) != 0)
-        {
-            throw std::runtime_error("failed to create window surface!");
-        }
-        surface = vk::raii::SurfaceKHR(instance, rawSurface);
+        instance = &nodensVulkanContext->GetInstanceRAII();
+        surface = &nodensVulkanContext->GetSurfaceRAII();
     }
 
     /// @brief Checks API version, queue support, extensions, and features.
@@ -250,7 +94,7 @@ private:
     /// @brief Selects first physical device satisfying `isDeviceSuitable()`.
     void pickPhysicalDevice()
     {
-        auto availablePhysicalDevices = instance.enumeratePhysicalDevices();
+        auto availablePhysicalDevices = instance->enumeratePhysicalDevices();
         auto deviceIterator =
             std::ranges::find_if(availablePhysicalDevices, [&](const auto& dev) { return isDeviceSuitable(dev); });
         if (deviceIterator == availablePhysicalDevices.end())
@@ -270,7 +114,7 @@ private:
         for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
         {
             if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
-                physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface))
+                physicalDevice.getSurfaceSupportKHR(qfpIndex, **surface))
             {
                 queueIndex = qfpIndex;
                 break;
@@ -389,17 +233,17 @@ private:
     /// @brief Creates swapchain using current capabilities and preferences.
     void createSwapChain()
     {
-        vk::SurfaceCapabilitiesKHR surfaceCapabilites = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
+        vk::SurfaceCapabilitiesKHR surfaceCapabilites = physicalDevice.getSurfaceCapabilitiesKHR(**surface);
         swapChainExtent = chooseSwapExtent(surfaceCapabilites);
         uint32_t minImageCount = chooseSwapMinImageCount(surfaceCapabilites);
 
-        std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR(*surface);
+        std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR(**surface);
         swapChainSurfaceFormat = chooseSwapSurfaceFormat(availableFormats);
 
-        std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(*surface);
+        std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(**surface);
 
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-            .surface = *surface,
+            .surface = **surface,
             .minImageCount = minImageCount,
             .imageFormat = swapChainSurfaceFormat.format,
             .imageColorSpace = swapChainSurfaceFormat.colorSpace,
@@ -642,8 +486,8 @@ private:
                                            .dstAccessMask = dst_access_mask,
                                            .oldLayout = old_layout,
                                            .newLayout = new_layout,
-                                           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                           .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+                                           .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
                                            .image = swapChainImages[imageIndex],
                                            .subresourceRange = {
                                                .aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -741,6 +585,16 @@ private:
     /// @brief Acquires, records, submits, and presents one frame.
     void drawFrame()
     {
+        int framebufferWidth{0};
+        int framebufferHeight{0};
+        glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+        if (framebufferWidth == 0 || framebufferHeight == 0)
+            return;
+
+        framebufferResized = framebufferResized ||
+                             static_cast<uint32_t>(framebufferWidth) != swapChainExtent.width ||
+                             static_cast<uint32_t>(framebufferHeight) != swapChainExtent.height;
+
         auto fenceResult =
             device.waitForFences(*inflightFences[frameIndex], vk::True, std::numeric_limits<uint64_t>::max());
         if (fenceResult != vk::Result::eSuccess)
@@ -791,7 +645,6 @@ private:
 
         if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized)
         {
-            framebufferResized = false;
             recreateSwapChain();
             return;
         }
@@ -813,18 +666,11 @@ private:
     /// @brief Rebuilds swapchain and image views after surface changes.
     void recreateSwapChain()
     {
-        // Wait until minimized window has a non-zero framebuffer.
-        int width{0}, height{0};
+        int width{0};
+        int height{0};
         glfwGetFramebufferSize(window, &width, &height);
-        while ((width == 0 || height == 0) && !glfwWindowShouldClose(window))
-        {
-            glfwGetFramebufferSize(window, &width, &height);
-            glfwWaitEvents();
-        }
-        if (glfwWindowShouldClose(window))
-        {
+        if (width == 0 || height == 0)
             return;
-        }
 
         device.waitIdle();
 
@@ -832,24 +678,21 @@ private:
 
         createSwapChain();
         createImageViews();
+        framebufferResized = false;
     }
 
-    /// @brief Stops GPU work, releases swapchain resources, and terminates GLFW.
+    /// @brief Stops GPU work and releases Vulkan rendering resources.
     void cleanup()
     {
         device.waitIdle();
         cleanupSwapChain();
-
-        glfwDestroyWindow(window);
-        glfwTerminate();
     }
 
 private:
-    GLFWwindow* window{nullptr};                              ///< GLFW window owned by this layer.
-    vk::raii::Context context{};                              ///< Vulkan loader context.
-    vk::raii::Instance instance{nullptr};                     ///< Vulkan instance.
-    vk::raii::DebugUtilsMessengerEXT debugMessenger{nullptr}; ///< Validation callback.
-    vk::raii::SurfaceKHR surface{nullptr};                    ///< Presentation surface created from GLFW.
+    GLFWwindow* window{nullptr};                         ///< Borrowed GLFW window owned by Nodens.
+    Nodens::VulkanContext* nodensVulkanContext{nullptr}; ///< Borrowed Nodens Vulkan context.
+    const vk::raii::Instance* instance{nullptr};         ///< Borrowed Vulkan instance.
+    const vk::raii::SurfaceKHR* surface{nullptr};        ///< Borrowed presentation surface.
 
     vk::raii::PhysicalDevice physicalDevice{nullptr}; ///< Selected physical device.
     vk::raii::Device device{nullptr};                 ///< Logical device exposing required features.
