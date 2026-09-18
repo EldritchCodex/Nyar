@@ -2,9 +2,11 @@
 .cache/
 .zed/
 .vscode/
+__cmake_systeminformation/
 
 # Build output
 build/
+*imgui.ini
 
 # C/C++ dependency files
 *.d
