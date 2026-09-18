@@ -1,21 +1,34 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT) 
+![Supported platforms: Linux ](https://img.shields.io/badge/Supported%20platforms-Linux-blue.svg?style=flat-square)
 
-![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/1?style=flat-square&link=https%3A%2F%2Fgithub.com%2FEldritchCodex%2FNyar%2Fmilestone%2F1)
-![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/3?style=flat-square&link=https%3A%2F%2Fgithub.com%2FEldritchCodex%2FNyar%2Fmilestone%2F3)
-![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/2?style=flat-square&link=https%3A%2F%2Fgithub.com%2FEldritchCodex%2FNyar%2Fmilestone%2F2)
+[![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/1?style=flat-square)](https://github.com/eldritchcodex/nyar/milestone/1)
+[![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/3?style=flat-square)](https://github.com/eldritchcodex/nyar/milestone/3)
+[![GitHub milestone details](https://img.shields.io/github/milestones/progress/eldritchcodex/nyar/2?style=flat-square)](https://github.com/eldritchcodex/nyar/milestone/2)
 
 > ⚠️ **Development Status:** Nyar is currently in **active, experimental development** with no stable release. It serves primarily as a learning ground and playground for exploring real-time rendering Vulkan architecture and modern C++20/23 features. APIs are highly subject to change.
+
 
 ## Nyar: A Vulkan real-time renderer
 
 This project is designed to work as a separate module for the [Nodens](https://github.com/EldritchCodex/Nodens) framework. 
 Its design and implementation draw from established principles in real-time rendering and modern engine architecture and tools (e.g. Slang shaders, dynamic rendering, etc.)
 
-
-## Development
-
 - **Immediate Goal:** Follow and complete the official [Khronos Vulkan "Drawing a triangle" tutorial](https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html) to establish a solid baseline.
 - **Future Direction:** Incrementally refactor and morph the working tutorial code into a dedicated renderer API.
+
+
+## Development Environment
+
+Nyar uses EldritchCodex's shared Linux graphics image through `.devcontainer/devcontainer.json`:
+
+```text
+ghcr.io/eldritchcodex/linux-graphics-dev:main
+```
+
+Open Nyar in Zed or Visual Studio Code, then reopen it in the Dev Container.
+NVIDIA hosts need a working host driver and NVIDIA Container Toolkit. Intel/AMD
+hosts use the `/dev/dri` configuration. See the [Nodens toolchain guide](https://github.com/EldritchCodex/Nodens/wiki/Building-and-Toolchain)
+for GPU setup details.
 
 
 ## References
