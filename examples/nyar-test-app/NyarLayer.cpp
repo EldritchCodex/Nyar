@@ -14,7 +14,6 @@ import nodens;
 void NyarLayer::OnAttach()
 {
     attachToNodensWindow();
-    pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
     createImageViews();

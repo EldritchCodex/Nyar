@@ -55,66 +55,20 @@ private:
 
         instance = &nodensVulkanContext->GetInstanceRAII();
         surface = &nodensVulkanContext->GetSurfaceRAII();
-    }
-
-    /// @brief Checks API version, queue support, extensions, and features.
-    /// @param physicalDevice Candidate device to inspect.
-    /// @return True when device satisfies example requirements.
-    bool isDeviceSuitable(const vk::raii::PhysicalDevice& physicalDevice)
-    {
-        bool supportsVulkan1_3 = physicalDevice.getProperties().apiVersion >= vk::ApiVersion13;
-
-        auto queueFamilies = physicalDevice.getQueueFamilyProperties();
-        bool supportsGraphics = std::ranges::any_of(
-            queueFamilies,
-            [](const auto& qfp) { return static_cast<bool>(qfp.queueFlags & vk::QueueFlagBits::eGraphics); });
-
-        std::vector<const char*> requiredDeviceExtensions{vk::KHRSwapchainExtensionName};
-        auto availableDeviceExtensionsNames =
-            physicalDevice.enumerateDeviceExtensionProperties() |
-            std::views::transform([](const auto& prop) { return std::string_view(prop.extensionName); });
-        bool supportsAllRequiredExtensions = std::ranges::all_of(
-            requiredDeviceExtensions,
-            [&availableDeviceExtensionsNames](std::string_view requiredDeviceExtensions)
-            { return std::ranges::contains(availableDeviceExtensionsNames, requiredDeviceExtensions); });
-
-        auto features = physicalDevice.template getFeatures2<vk::PhysicalDeviceFeatures2,
-                                                             vk::PhysicalDeviceVulkan11Features,
-                                                             vk::PhysicalDeviceVulkan13Features,
-                                                             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-        bool supportsRequiredFeatures =
-            features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
-            features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
-            features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
-            features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
-
-        return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
-    }
-
-    /// @brief Selects first physical device satisfying `isDeviceSuitable()`.
-    void pickPhysicalDevice()
-    {
-        auto availablePhysicalDevices = instance->enumeratePhysicalDevices();
-        auto deviceIterator =
-            std::ranges::find_if(availablePhysicalDevices, [&](const auto& dev) { return isDeviceSuitable(dev); });
-        if (deviceIterator == availablePhysicalDevices.end())
-        {
-            throw std::runtime_error{"failed to find suitable GPU!"};
-        }
-        physicalDevice = *deviceIterator;
+        physicalDevice = &nodensVulkanContext->GetPhysicalDevice();
     }
 
     /// @brief Creates logical device with one graphics-and-present queue.
     void createLogicalDevice()
     {
         // Select one queue family that supports graphics and presentation.
-        std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
+        std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice->getQueueFamilyProperties();
 
         queueIndex = ~0;
         for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
         {
             if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
-                physicalDevice.getSurfaceSupportKHR(qfpIndex, **surface))
+                physicalDevice->getSurfaceSupportKHR(qfpIndex, **surface))
             {
                 queueIndex = qfpIndex;
                 break;
@@ -161,7 +115,7 @@ private:
                                                   static_cast<uint32_t>(requiredDeviceExtensions.size()),
                                               .ppEnabledExtensionNames = requiredDeviceExtensions.data()};
 
-        device = vk::raii::Device(physicalDevice, deviceCreateInfo);
+        device = vk::raii::Device(*physicalDevice, deviceCreateInfo);
 
         // Store a handle to the first (0) queue from the queue family `graphicsIndex` on logical device `device`
         graphicsQueue = vk::raii::Queue(device, queueIndex, 0);
@@ -233,14 +187,14 @@ private:
     /// @brief Creates swapchain using current capabilities and preferences.
     void createSwapChain()
     {
-        vk::SurfaceCapabilitiesKHR surfaceCapabilites = physicalDevice.getSurfaceCapabilitiesKHR(**surface);
+        vk::SurfaceCapabilitiesKHR surfaceCapabilites = physicalDevice->getSurfaceCapabilitiesKHR(**surface);
         swapChainExtent = chooseSwapExtent(surfaceCapabilites);
         uint32_t minImageCount = chooseSwapMinImageCount(surfaceCapabilites);
 
-        std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR(**surface);
+        std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice->getSurfaceFormatsKHR(**surface);
         swapChainSurfaceFormat = chooseSwapSurfaceFormat(availableFormats);
 
-        std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(**surface);
+        std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice->getSurfacePresentModesKHR(**surface);
 
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{
             .surface = **surface,
@@ -694,7 +648,7 @@ private:
     const vk::raii::Instance* instance{nullptr};         ///< Borrowed Vulkan instance.
     const vk::raii::SurfaceKHR* surface{nullptr};        ///< Borrowed presentation surface.
 
-    vk::raii::PhysicalDevice physicalDevice{nullptr}; ///< Selected physical device.
+    const vk::raii::PhysicalDevice* physicalDevice{nullptr}; ///< Borrowed selected physical device.
     vk::raii::Device device{nullptr};                 ///< Logical device exposing required features.
     vk::raii::Queue graphicsQueue{nullptr};           ///< Queue supporting graphics and presentation.
 
