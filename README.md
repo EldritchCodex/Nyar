@@ -22,7 +22,7 @@ Its design and implementation draw from established principles in real-time rend
 Nyar uses EldritchCodex's shared Linux graphics image through `.devcontainer/devcontainer.json`:
 
 ```text
-ghcr.io/eldritchcodex/linux-graphics-dev:main
+ghcr.io/eldritchcodex/arch-dev:main
 ```
 
 Open Nyar in Zed or Visual Studio Code, then reopen it in the Dev Container.
