@@ -14,7 +14,6 @@ import Nodens.VulkanContext;
 import nodens;
 import std;
 
-
 /// @brief Nodens layer that owns tutorial Vulkan rendering resources.
 /// @details Nodens owns the GLFW window and Vulkan platform resources. This layer
 ///          borrows those resources and owns the pipeline, command, and frame resources.
@@ -337,7 +336,6 @@ private:
         commandBuffer.end();
     }
 
-
     /// @brief Records and submits one frame through Nodens.
     void drawFrame()
     {
@@ -353,8 +351,6 @@ private:
         nodensVulkanContext->EndFrame(*commandBuffers[frameIndex], *imageIndex);
     }
 
-
-
     /// @brief Stops GPU work and releases Vulkan rendering resources.
     void cleanup()
     {
@@ -364,17 +360,15 @@ private:
 private:
     Nodens::VulkanContext* nodensVulkanContext{nullptr}; ///< Borrowed Nodens Vulkan context.
 
-    const vk::raii::Device* device{nullptr};                ///< Borrowed logical device owned by Nodens.
+    const vk::raii::Device* device{nullptr}; ///< Borrowed logical device owned by Nodens.
 
-    vk::Extent2D swapChainExtent{};                         ///< Current swapchain dimensions.
-    vk::SurfaceFormatKHR swapChainSurfaceFormat{};          ///< Current swapchain format.
-    const std::vector<vk::Image>* swapChainImages{nullptr}; ///< Borrowed swapchain image handles.
+    vk::Extent2D swapChainExtent{};                                       ///< Current swapchain dimensions.
+    vk::SurfaceFormatKHR swapChainSurfaceFormat{};                        ///< Current swapchain format.
+    const std::vector<vk::Image>* swapChainImages{nullptr};               ///< Borrowed swapchain image handles.
     const std::vector<vk::raii::ImageView>* swapChainImageViews{nullptr}; ///< Borrowed image views.
-    vk::raii::PipelineLayout pipelineLayout{nullptr};       ///< Empty tutorial pipeline layout.
-    vk::raii::Pipeline graphicsPipeline{nullptr};           ///< Triangle graphics pipeline.
-    vk::raii::CommandPool commandPool{nullptr};             ///< Pool for graphics command buffers.
-    std::vector<vk::raii::CommandBuffer> commandBuffers{};  ///< Per-frame command buffers.
-    uint32_t queueIndex{};                                  ///< Selected graphics/presentation queue family.
-
-
+    vk::raii::PipelineLayout pipelineLayout{nullptr};                     ///< Empty tutorial pipeline layout.
+    vk::raii::Pipeline graphicsPipeline{nullptr};                         ///< Triangle graphics pipeline.
+    vk::raii::CommandPool commandPool{nullptr};                           ///< Pool for graphics command buffers.
+    std::vector<vk::raii::CommandBuffer> commandBuffers{};                ///< Per-frame command buffers.
+    uint32_t queueIndex{}; ///< Selected graphics/presentation queue family.
 };

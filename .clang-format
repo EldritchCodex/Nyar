@@ -42,6 +42,9 @@ NamespaceIndentation: None
 AlwaysBreakTemplateDeclarations: Yes
 AccessModifierOffset: -4
 
+# Empty Lines
+MaxEmptyLinesToKeep: 1
+
 # Others
 BreakBinaryOperations: RespectPrecedence
 AllowShortCompoundRequirementOnASingleLine: true
