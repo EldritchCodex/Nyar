@@ -17,9 +17,9 @@ import std;
 constexpr int MAX_FRAMES_IN_FLIGHT{2}; ///< Number of CPU frames allowed in flight.
 
 /// @brief Nodens layer that owns tutorial Vulkan rendering resources.
-/// @details Nodens owns the GLFW window, Vulkan instance, and surface. This layer
-///          borrows those objects and owns the device, swapchain, pipeline, and
-///          frame resources.
+/// @details Nodens owns the GLFW window, Vulkan instance, surface, physical device,
+///          logical device, and graphics queue. This layer borrows those objects and
+///          owns the swapchain, pipeline, and frame resources.
 /// @ingroup Examples
 export class NyarLayer : public Nodens::ILayer
 {
@@ -56,69 +56,9 @@ private:
         instance = &nodensVulkanContext->GetInstanceRAII();
         surface = &nodensVulkanContext->GetSurfaceRAII();
         physicalDevice = &nodensVulkanContext->GetPhysicalDevice();
-    }
-
-    /// @brief Creates logical device with one graphics-and-present queue.
-    void createLogicalDevice()
-    {
-        // Select one queue family that supports graphics and presentation.
-        std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice->getQueueFamilyProperties();
-
-        queueIndex = ~0;
-        for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
-        {
-            if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
-                physicalDevice->getSurfaceSupportKHR(qfpIndex, **surface))
-            {
-                queueIndex = qfpIndex;
-                break;
-            }
-        }
-
-        if (queueIndex == ~0)
-        {
-            throw std::runtime_error("Could not find a queue for graphics and present. "
-                                     "Terminating...");
-        }
-
-        // Describe queue priority and selected queue family.
-        float queuePriority{0.5f};
-
-        vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
-            .queueFamilyIndex = queueIndex, .queueCount = 1, .pQueuePriorities = &queuePriority};
-
-        // Enable swapchain support on logical device.
-        std::vector<const char*> requiredDeviceExtensions{vk::KHRSwapchainExtensionName};
-
-        // Enable features used by dynamic rendering and synchronization2.
-        vk::StructureChain<vk::PhysicalDeviceFeatures2,
-                           vk::PhysicalDeviceVulkan11Features,
-                           vk::PhysicalDeviceVulkan13Features,
-                           vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
-            featureChain = {{},
-                            {
-                                .shaderDrawParameters = true,
-                            },
-                            {
-                                .synchronization2 = true,
-                                .dynamicRendering = true,
-                            },
-                            {
-                                .extendedDynamicState = true,
-                            }};
-
-        // Create device and retrieve its graphics/present queue.
-        vk::DeviceCreateInfo deviceCreateInfo{.pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
-                                              .queueCreateInfoCount = 1,
-                                              .pQueueCreateInfos = &deviceQueueCreateInfo,
-                                              .enabledExtensionCount =
-                                                  static_cast<uint32_t>(requiredDeviceExtensions.size()),
-                                              .ppEnabledExtensionNames = requiredDeviceExtensions.data()};
-
-        device = vk::raii::Device(*physicalDevice, deviceCreateInfo);
-
-        // Store a handle to the first (0) queue from the queue family `graphicsIndex` on logical device `device`
-        graphicsQueue = vk::raii::Queue(device, queueIndex, 0);
+        device = &nodensVulkanContext->GetDeviceRAII();
+        graphicsQueue = &nodensVulkanContext->GetGraphicsQueueRAII();
+        queueIndex = nodensVulkanContext->GetGraphicsQueueFamilyIndex();
     }
 
     /// @brief Prefers sRGB color; falls back to first surface format.
@@ -213,7 +153,7 @@ private:
             .presentMode = chooseSwapPresentMode(availablePresentModes),
             .clipped = true};
 
-        swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
+        swapChain = vk::raii::SwapchainKHR(*device, swapChainCreateInfo);
         swapChainImages = swapChain.getImages();
     }
 
@@ -235,7 +175,7 @@ private:
         for (auto& image : swapChainImages)
         {
             imageViewCreateInfo.image = image;
-            swapChainImageViews.emplace_back(device, imageViewCreateInfo);
+            swapChainImageViews.emplace_back(*device, imageViewCreateInfo);
         }
     }
 
@@ -274,7 +214,7 @@ private:
             .pCode = reinterpret_cast<const uint32_t*>(code.data()),
         };
 
-        vk::raii::ShaderModule shaderModule{device, createInfo};
+        vk::raii::ShaderModule shaderModule{*device, createInfo};
 
         return shaderModule;
     }
@@ -364,7 +304,7 @@ private:
             .pushConstantRangeCount = 0,
         };
 
-        pipelineLayout = vk::raii::PipelineLayout{device, pipelineLayoutCreateInfo};
+        pipelineLayout = vk::raii::PipelineLayout{*device, pipelineLayoutCreateInfo};
 
         vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo{
             .colorAttachmentCount = 1,
@@ -392,7 +332,7 @@ private:
         };
 
         graphicsPipeline =
-            vk::raii::Pipeline{device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>()};
+            vk::raii::Pipeline{*device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>()};
     }
 
     /// @brief Creates resettable command pool for selected graphics queue family.
@@ -403,7 +343,7 @@ private:
             .queueFamilyIndex = queueIndex,
         };
 
-        commandPool = vk::raii::CommandPool(device, commandPoolCreateInfo);
+        commandPool = vk::raii::CommandPool(*device, commandPoolCreateInfo);
     }
 
     /// @brief Allocates one primary command buffer per frame in flight.
@@ -415,7 +355,7 @@ private:
             .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
         };
 
-        commandBuffers = std::move(vk::raii::CommandBuffers{device, commandBufferAllocateInfo});
+        commandBuffers = std::move(vk::raii::CommandBuffers{*device, commandBufferAllocateInfo});
     }
 
     /// @brief Inserts synchronization2 barrier for one swapchain image transition.
@@ -526,13 +466,13 @@ private:
 
         for (size_t i = 0; i < swapChainImages.size(); ++i)
         {
-            renderFinishedSemaphores.push_back(vk::raii::Semaphore(device, vk::SemaphoreCreateInfo{}));
+            renderFinishedSemaphores.push_back(vk::raii::Semaphore(*device, vk::SemaphoreCreateInfo{}));
         }
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         {
-            presentCompleteSemaphores.push_back(vk::raii::Semaphore(device, vk::SemaphoreCreateInfo{}));
+            presentCompleteSemaphores.push_back(vk::raii::Semaphore(*device, vk::SemaphoreCreateInfo{}));
             inflightFences.push_back(
-                vk::raii::Fence(device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}));
+                vk::raii::Fence(*device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}));
         }
     }
 
@@ -550,7 +490,7 @@ private:
                              static_cast<uint32_t>(framebufferHeight) != swapChainExtent.height;
 
         auto fenceResult =
-            device.waitForFences(*inflightFences[frameIndex], vk::True, std::numeric_limits<uint64_t>::max());
+            device->waitForFences(*inflightFences[frameIndex], vk::True, std::numeric_limits<uint64_t>::max());
         if (fenceResult != vk::Result::eSuccess)
         {
             throw std::runtime_error("Failed to wait for fence");
@@ -569,7 +509,7 @@ private:
             throw std::runtime_error("failed to acquire swap chain image");
         }
 
-        device.resetFences(*inflightFences[frameIndex]);
+        device->resetFences(*inflightFences[frameIndex]);
 
         commandBuffers[frameIndex].reset();
         recordCommandBuffer(imageIndex);
@@ -585,7 +525,7 @@ private:
             .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex],
         };
 
-        graphicsQueue.submit(submitInfo, *inflightFences[frameIndex]);
+        graphicsQueue->submit(submitInfo, *inflightFences[frameIndex]);
 
         const vk::PresentInfoKHR presentInfoKHR{
             .waitSemaphoreCount = 1,
@@ -595,7 +535,7 @@ private:
             .pImageIndices = &imageIndex,
         };
 
-        result = graphicsQueue.presentKHR(presentInfoKHR);
+        result = graphicsQueue->presentKHR(presentInfoKHR);
 
         if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized)
         {
@@ -626,7 +566,7 @@ private:
         if (width == 0 || height == 0)
             return;
 
-        device.waitIdle();
+        device->waitIdle();
 
         cleanupSwapChain();
 
@@ -638,7 +578,7 @@ private:
     /// @brief Stops GPU work and releases Vulkan rendering resources.
     void cleanup()
     {
-        device.waitIdle();
+        device->waitIdle();
         cleanupSwapChain();
     }
 
@@ -649,8 +589,9 @@ private:
     const vk::raii::SurfaceKHR* surface{nullptr};        ///< Borrowed presentation surface.
 
     const vk::raii::PhysicalDevice* physicalDevice{nullptr}; ///< Borrowed selected physical device.
-    vk::raii::Device device{nullptr};                 ///< Logical device exposing required features.
-    vk::raii::Queue graphicsQueue{nullptr};           ///< Queue supporting graphics and presentation.
+
+    const vk::raii::Device* device{nullptr};                ///< Borrowed logical device owned by Nodens.
+    const vk::raii::Queue* graphicsQueue{nullptr};          ///< Borrowed queue owned by Nodens.
 
     vk::raii::SwapchainKHR swapChain{nullptr};              ///< Images presented to the window.
     vk::Extent2D swapChainExtent{};                         ///< Current swapchain dimensions.
