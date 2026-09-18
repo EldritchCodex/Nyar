@@ -17,9 +17,8 @@ import std;
 constexpr int MAX_FRAMES_IN_FLIGHT{2}; ///< Number of CPU frames allowed in flight.
 
 /// @brief Nodens layer that owns tutorial Vulkan rendering resources.
-/// @details Nodens owns the GLFW window, Vulkan instance, surface, physical device,
-///          logical device, and graphics queue. This layer borrows those objects and
-///          owns the swapchain, pipeline, and frame resources.
+/// @details Nodens owns the GLFW window and Vulkan platform resources. This layer
+///          borrows those resources and owns the pipeline, command, and frame resources.
 /// @ingroup Examples
 export class NyarLayer : public Nodens::ILayer
 {
@@ -42,7 +41,7 @@ public:
     // void OnImGuiRender(Nodens::TimeStep ts) override;
 
 private:
-    /// @brief Borrows Nodens' window and Vulkan instance/surface.
+    /// @brief Borrows Nodens window, Vulkan context, and swapchain resources.
     void attachToNodensWindow()
     {
         auto& nodensWindow = Nodens::Application::Get().GetWindow();
@@ -53,130 +52,14 @@ private:
         if (!nodensVulkanContext)
             throw std::runtime_error{"NyarLayer requires a Nodens Vulkan window"};
 
-        instance = &nodensVulkanContext->GetInstanceRAII();
-        surface = &nodensVulkanContext->GetSurfaceRAII();
-        physicalDevice = &nodensVulkanContext->GetPhysicalDevice();
         device = &nodensVulkanContext->GetDeviceRAII();
         graphicsQueue = &nodensVulkanContext->GetGraphicsQueueRAII();
         queueIndex = nodensVulkanContext->GetGraphicsQueueFamilyIndex();
-    }
-
-    /// @brief Prefers sRGB color; falls back to first surface format.
-    /// @param availableFormats Formats reported by the presentation surface.
-    /// @return Format used by the swapchain.
-    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
-    {
-        assert(!availableFormats.empty());
-
-        const auto formatIt = std::ranges::find_if(availableFormats,
-                                                   [](const vk::SurfaceFormatKHR& format)
-                                                   {
-                                                       return format.format == vk::Format::eB8G8R8A8Srgb &&
-                                                              format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-                                                   });
-
-        return formatIt != availableFormats.end() ? *formatIt : availableFormats[0];
-    }
-
-    /// @brief Prefers mailbox presentation; uses required FIFO fallback.
-    /// @param availablePresentModes Modes reported by the presentation surface.
-    /// @return Presentation mode used by the swapchain.
-    vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
-    {
-        assert(std::ranges::any_of(availablePresentModes,
-                                   [](const vk::PresentModeKHR presentMode)
-                                   { return presentMode == vk::PresentModeKHR::eFifo; }));
-        return std::ranges::any_of(availablePresentModes,
-                                   [](const vk::PresentModeKHR value) { return value == vk::PresentModeKHR::eMailbox; })
-                   ? vk::PresentModeKHR::eMailbox
-                   : vk::PresentModeKHR::eFifo;
-    }
-
-    /// @brief Chooses surface extent, clamping GLFW framebuffer size when needed.
-    /// @param capabilities Surface limits and current extent.
-    /// @return Extent used by the swapchain.
-    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
-    {
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-        {
-            return capabilities.currentExtent;
-        }
-
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-
-        return {
-            .width = std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-            .height =
-                std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)};
-    }
-
-    /// @brief Chooses at least three swapchain images within surface limits.
-    /// @param surfaceCapabilities Surface limits for image count.
-    /// @return Image count used by the swapchain.
-    uint32_t chooseSwapMinImageCount(const vk::SurfaceCapabilitiesKHR& surfaceCapabilities)
-    {
-        auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
-        if (0 < surfaceCapabilities.maxImageCount && surfaceCapabilities.maxImageCount < minImageCount)
-        {
-            minImageCount = surfaceCapabilities.maxImageCount;
-        }
-        return minImageCount;
-    }
-
-    /// @brief Creates swapchain using current capabilities and preferences.
-    void createSwapChain()
-    {
-        vk::SurfaceCapabilitiesKHR surfaceCapabilites = physicalDevice->getSurfaceCapabilitiesKHR(**surface);
-        swapChainExtent = chooseSwapExtent(surfaceCapabilites);
-        uint32_t minImageCount = chooseSwapMinImageCount(surfaceCapabilites);
-
-        std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice->getSurfaceFormatsKHR(**surface);
-        swapChainSurfaceFormat = chooseSwapSurfaceFormat(availableFormats);
-
-        std::vector<vk::PresentModeKHR> availablePresentModes = physicalDevice->getSurfacePresentModesKHR(**surface);
-
-        vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-            .surface = **surface,
-            .minImageCount = minImageCount,
-            .imageFormat = swapChainSurfaceFormat.format,
-            .imageColorSpace = swapChainSurfaceFormat.colorSpace,
-            .imageExtent = swapChainExtent,
-            .imageArrayLayers = 1,                                  // Always 1, unless for stereoscopic 3D.
-            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment, // Specifies what kind of operations the images in
-                                                                    // the swapchain will be used for. In this case,
-                                                                    // we'll render directly to them.
-            .imageSharingMode = vk::SharingMode::eExclusive, // Specifies how to handle swap chain images that might be
-                                                             // used across multiple queue families.
-            .preTransform = surfaceCapabilites.currentTransform,
-            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-            .presentMode = chooseSwapPresentMode(availablePresentModes),
-            .clipped = true};
-
-        swapChain = vk::raii::SwapchainKHR(*device, swapChainCreateInfo);
-        swapChainImages = swapChain.getImages();
-    }
-
-    /// @brief Creates one color image view for each swapchain image.
-    void createImageViews()
-    {
-        assert(!swapChainImages.empty());
-
-        vk::ImageViewCreateInfo imageViewCreateInfo{
-            .viewType = vk::ImageViewType::e2D,
-            .format = swapChainSurfaceFormat.format,
-            .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
-                                 .baseMipLevel = 0,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1},
-        };
-
-        for (auto& image : swapChainImages)
-        {
-            imageViewCreateInfo.image = image;
-            swapChainImageViews.emplace_back(*device, imageViewCreateInfo);
-        }
+        swapChain = &nodensVulkanContext->GetSwapchainRAII();
+        swapChainImages = &nodensVulkanContext->GetSwapchainImages();
+        swapChainImageViews = &nodensVulkanContext->GetSwapchainImageViews();
+        swapChainExtent = nodensVulkanContext->GetSwapchainExtent();
+        swapChainSurfaceFormat = nodensVulkanContext->GetSwapchainSurfaceFormat();
     }
 
     /// @brief Reads binary shader data relative to process working directory.
@@ -382,7 +265,7 @@ private:
                                            .newLayout = new_layout,
                                            .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
                                            .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-                                           .image = swapChainImages[imageIndex],
+                                           .image = swapChainImages->at(imageIndex),
                                            .subresourceRange = {
                                                .aspectMask = vk::ImageAspectFlagBits::eColor,
                                                .baseMipLevel = 0,
@@ -415,7 +298,7 @@ private:
 
         vk::ClearValue clearColor = vk::ClearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
         vk::RenderingAttachmentInfo renderingAttachmentInfo = {
-            .imageView = swapChainImageViews[imageIndex],
+            .imageView = (*swapChainImageViews)[imageIndex],
             .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
             .loadOp = vk::AttachmentLoadOp::eClear,
             .storeOp = vk::AttachmentStoreOp::eStore,
@@ -464,7 +347,7 @@ private:
     {
         assert(presentCompleteSemaphores.empty() && renderFinishedSemaphores.empty() && inflightFences.empty());
 
-        for (size_t i = 0; i < swapChainImages.size(); ++i)
+        for (size_t i = 0; i < swapChainImages->size(); ++i)
         {
             renderFinishedSemaphores.push_back(vk::raii::Semaphore(*device, vk::SemaphoreCreateInfo{}));
         }
@@ -496,7 +379,7 @@ private:
             throw std::runtime_error("Failed to wait for fence");
         }
 
-        auto [result, imageIndex] = swapChain.acquireNextImage(
+        auto [result, imageIndex] = swapChain->acquireNextImage(
             std::numeric_limits<uint64_t>::max(), *presentCompleteSemaphores[frameIndex], nullptr);
         if (result == vk::Result::eErrorOutOfDateKHR)
         {
@@ -531,7 +414,7 @@ private:
             .waitSemaphoreCount = 1,
             .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
             .swapchainCount = 1,
-            .pSwapchains = &*swapChain,
+            .pSwapchains = &**swapChain,
             .pImageIndices = &imageIndex,
         };
 
@@ -550,12 +433,6 @@ private:
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    /// @brief Releases resources tied to the current swapchain.
-    void cleanupSwapChain()
-    {
-        swapChainImageViews.clear();
-        swapChain = nullptr;
-    }
 
     /// @brief Rebuilds swapchain and image views after surface changes.
     void recreateSwapChain()
@@ -568,10 +445,9 @@ private:
 
         device->waitIdle();
 
-        cleanupSwapChain();
-
-        createSwapChain();
-        createImageViews();
+        nodensVulkanContext->RecreateSwapchain();
+        swapChainExtent = nodensVulkanContext->GetSwapchainExtent();
+        swapChainSurfaceFormat = nodensVulkanContext->GetSwapchainSurfaceFormat();
         framebufferResized = false;
     }
 
@@ -579,25 +455,20 @@ private:
     void cleanup()
     {
         device->waitIdle();
-        cleanupSwapChain();
     }
 
 private:
     GLFWwindow* window{nullptr};                         ///< Borrowed GLFW window owned by Nodens.
     Nodens::VulkanContext* nodensVulkanContext{nullptr}; ///< Borrowed Nodens Vulkan context.
-    const vk::raii::Instance* instance{nullptr};         ///< Borrowed Vulkan instance.
-    const vk::raii::SurfaceKHR* surface{nullptr};        ///< Borrowed presentation surface.
-
-    const vk::raii::PhysicalDevice* physicalDevice{nullptr}; ///< Borrowed selected physical device.
 
     const vk::raii::Device* device{nullptr};                ///< Borrowed logical device owned by Nodens.
     const vk::raii::Queue* graphicsQueue{nullptr};          ///< Borrowed queue owned by Nodens.
 
-    vk::raii::SwapchainKHR swapChain{nullptr};              ///< Images presented to the window.
+    const vk::raii::SwapchainKHR* swapChain{nullptr}; ///< Borrowed swapchain owned by Nodens.
     vk::Extent2D swapChainExtent{};                         ///< Current swapchain dimensions.
     vk::SurfaceFormatKHR swapChainSurfaceFormat{};          ///< Current swapchain format.
-    std::vector<vk::Image> swapChainImages{};               ///< Swapchain image handles.
-    std::vector<vk::raii::ImageView> swapChainImageViews{}; ///< Swapchain color views.
+    const std::vector<vk::Image>* swapChainImages{nullptr}; ///< Borrowed swapchain image handles.
+    const std::vector<vk::raii::ImageView>* swapChainImageViews{nullptr}; ///< Borrowed image views.
     vk::raii::PipelineLayout pipelineLayout{nullptr};       ///< Empty tutorial pipeline layout.
     vk::raii::Pipeline graphicsPipeline{nullptr};           ///< Triangle graphics pipeline.
     vk::raii::CommandPool commandPool{nullptr};             ///< Pool for graphics command buffers.

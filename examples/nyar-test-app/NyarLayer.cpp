@@ -1,8 +1,7 @@
 /// @file NyarLayer.cpp
 /// @brief Connects the Vulkan tutorial layer to Nodens.
-/// @details Nodens owns the GLFW window, instance, surface, physical device,
-///          logical device, and queue. The layer owns rendering resources built
-///          on those borrowed objects.
+/// @details Nodens owns the GLFW window and Vulkan platform resources. The layer
+///          borrows those resources and owns rendering resources built on them.
 /// @ingroup Examples
 
 module;
@@ -15,8 +14,6 @@ import nodens;
 void NyarLayer::OnAttach()
 {
     attachToNodensWindow();
-    createSwapChain();
-    createImageViews();
     createGraphicsPipeline();
     createCommandPool();
     createCommandBuffers();
